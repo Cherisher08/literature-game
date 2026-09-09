@@ -2099,9 +2099,10 @@ Rules the server enforces:
 - **Only members of `teamId` may claim it** (`WRONG_TEAM`), and only while holding at least one card (`EMPTY_HAND`, §62.1). Opponents see that a declaration is underway but cannot touch it.
 - **Claiming is first-writer-wins.** Two teammates clicking simultaneously is the normal case, not an edge case; the second receives `DECLARATION_TAKEN` and a clear message naming who took it. Guard this with the per-room action lock from §51.3 — this is the specific race that lock exists for.
 - **The claimant may release** the window back to the team (`game:declaration-release`) if they change their mind. It returns to unclaimed, not to the opener.
+- **The opener may cancel** the window outright (`game:declaration-cancel`), closing it with no penalty and returning the turn to them. This is what makes "opening is not a commitment" true: without it, an opener who changes their mind is trapped, because release only unclaims and every ask stays blocked until the timeout. A teammate who has claimed the window is mid-declaration, so only they may cancel from that point.
 - **Windows expire** after `DECLARATION_WINDOW_MS` (default 90s, config). On expiry the window closes with no penalty and the turn returns to the opener, who may act again. Without a timeout, a team that opens a window and goes quiet stalls the room indefinitely — and the opener cannot cancel their way out, since they may not be the claimant.
 
-Opening a window is **not** a commitment to declare. Only Confirm resolves a set. This distinction should be explicit in the UI, or players will avoid the button.
+Opening a window is **not** a commitment to declare. Only Confirm resolves a set, and closing the dialog cancels the window rather than merely unclaiming it. This distinction should be explicit in the UI, or players will avoid the button.
 
 New events:
 
@@ -2109,7 +2110,8 @@ New events:
 |---|---|---|
 | `game:declaration-open` | C→S | Turn holder opens a window for their team |
 | `game:declaration-claim` | C→S | A teammate takes control of the window |
-| `game:declaration-release` | C→S | The claimant hands it back |
+| `game:declaration-release` | C→S | The claimant hands it back to the team |
+| `game:declaration-cancel` | C→S | Close the window entirely; turn returns to the opener |
 | `game:declaration-window` | S→C | Window opened / claimed / released / expired |
 
 The last one goes to the whole room. Opponents must see that a declaration is in progress — it is public information and it explains why play has paused.
@@ -2347,7 +2349,7 @@ Image 2's `⚡ Stolen on a failed claim` marker is a good detail: a set won beca
 ## 64.7 What Not to Adopt
 
 - **Achievements** (image 2) require cross-session player records and are out of scope under §63. Do not build a placeholder for them.
-- **Bot difficulty** (image 5) implies AI opponents; ours is 6 human players (§55). The setup modal's *shape* is still the right pattern for the lobby — segmented chips, one primary action, text Cancel.
+- **Bot difficulty** (image 5) — *superseded by §73: bots are implemented.* The setup modal's shape remains the right pattern for the lobby: segmented chips, one primary action, text Cancel.
 - **Share** is fine only if it shares an ephemeral result image or a room link, never a stored game record (§63).
 - The reference is 4- or 6-player with a 48-card deck. Ours is fixed at 6 players and 54 cards (§55) — the setup screen should state the requirement rather than offer a choice it cannot honour.
 
@@ -3016,3 +3018,59 @@ Join capacity, the §71 team cap (`playerCount / 2`) and seat alternation all de
 The win score is a majority of the nine sets: **5**, at every table size. Because nine is odd and every set is awarded to exactly one team, a winner is always reached and **ties are impossible** — §62.2 holds universally now that the set count no longer varies.
 
 The engine still carries a draw path (`drawn: true`, no `winningTeamId`) for the case where every set resolves without a majority. With nine sets that is unreachable, but it is cheap insurance against a future variant with an even set count, and the end screen renders it correctly.
+
+---
+
+# 73. Bots
+
+**Reverses §64.7**, which excluded bots on the grounds that the game was six humans. Bots fill empty seats at any table size and are chosen per team in the lobby.
+
+## 73.1 The Rule That Makes Bots Worth Having
+
+**A bot reasons from `ClientGameState` — the same projection a human at that seat receives (§53) — and from nothing else.**
+
+`chooseMove` takes a projection and returns an intent. It has no access to `GameState`, so it cannot see another player's hand even by accident. Fairness is structural, not policed.
+
+The alternative — letting a "hard" bot read server state — produces an omniscient opponent that is both unbeatable and pointless to play against. It is also the easy mistake to make, because the server has the full state right there.
+
+Every bot intent goes through `reduce` (§57), so a bug in the strategy produces a **rejected action**, never an illegal game state. Bots need no privileged code path and cannot desync the game.
+
+## 73.2 Difficulty Is Memory, Not Information
+
+| | Remembers | Plays |
+|---|---|---|
+| **Easy** | Its own hand | Random legal ask. Declares only a set it holds entirely itself. |
+| **Medium** | The public record — who asked for what, who denied what | Targets players it has reason to suspect. Declares when deduction shows the set sits entirely with its own team. |
+| **Hard** | Full constraint propagation, negative inference, card counting | Declares the moment a set collapses to one arrangement, whoever holds it. Occasionally asks for a card it already holds as a bluff (§13). |
+
+A hard bot is hard because it deduces well — the same skill the game asks of a human.
+
+## 73.3 What the Public Record Supports
+
+Knowledge is rebuilt from scratch each turn by replaying `history`. That costs more than an incremental cache and is far harder to get wrong: there is no stale state to drift.
+
+- A **successful** ask pins the card to the asker, overriding every earlier inference.
+- A **failed** ask proves only that the *target* lacked it. §13 means nothing can be concluded about the asker.
+- **Any** ask proves the asker held at least one card of that set (§48).
+- A player with `cardCount === 0` holds nothing.
+- Your own hand is exact — which also proves every card you do *not* hold is not yours.
+
+Negative facts stay valid because every transfer is public (§53): a card can only move through an observed ask, and a successful ask replaces the candidate set outright.
+
+**Constraint propagation** is where a hard bot earns its name: once a player's certain cards equal their card count, they can hold nothing else, so they drop out of every other card's candidates — which may pin further cards, and so on.
+
+## 73.4 Seats
+
+A bot occupies a real seat with a real hand and no socket. `broadcastState` skips players without a `socketId`, so bots simply receive nothing.
+
+- **Host only, lobby only.** Adding or removing a bot after the game starts is rejected with `NOT_IN_LOBBY` (§6).
+- Bots may be added **to a specific team** or left unassigned for the §71.2 auto-fill.
+- **A bot is never made host** (§59.1) — host migration skips them.
+- **Bots do not keep a room alive.** They are permanently "connected", so §54's empty-room timer ignores them; a room of nothing but bots is abandoned and closes.
+- On an open team turn (§62.5), a bot acts only if **no human on that team could** — humans are never robbed of a turn they are still deciding.
+
+Moves are delayed 0.9–2.2s so play is followable rather than instantaneous.
+
+## 73.5 Practical Effect
+
+Filling a table previously needed 4–8 browser tabs. One tab plus three bots is now a complete game, which makes manual testing of every later feature dramatically cheaper.

@@ -11,6 +11,15 @@ import type { ErrorCode } from "./errors.js";
 
 export type TeamId = "A" | "B";
 
+/**
+ * §73: bot skill. Difficulty is how much a bot remembers and infers, never
+ * privileged information — every bot reasons from the same projection a human
+ * receives (§53), so it is structurally incapable of cheating.
+ */
+export type BotDifficulty = "EASY" | "MEDIUM" | "HARD";
+
+export const BOT_DIFFICULTIES: readonly BotDifficulty[] = ["EASY", "MEDIUM", "HARD"];
+
 export const otherTeam = (t: TeamId): TeamId => (t === "A" ? "B" : "A");
 
 // ---------------------------------------------------------------------------
@@ -197,6 +206,8 @@ export type Action =
   | { type: "OPEN_DECLARATION"; playerId: string; now: number }
   | { type: "CLAIM_DECLARATION"; playerId: string }
   | { type: "RELEASE_DECLARATION"; playerId: string }
+  /** §62.4: the opener backs out. Opening is not a commitment to declare. */
+  | { type: "CANCEL_DECLARATION"; playerId: string }
   | { type: "DECLARE"; playerId: string; setId: SetId; assignments: Assignment[] }
   | { type: "EXPIRE_DECLARATION"; now: number }
   | { type: "EXPIRE_TEAM_TURN" };

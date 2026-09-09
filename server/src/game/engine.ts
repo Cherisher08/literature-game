@@ -373,6 +373,36 @@ function reduceReleaseDeclaration(
   );
 }
 
+/**
+ * §62.4: "Opening a window is not a commitment to declare." Without this the
+ * opener is trapped — release only unclaims, so the window stayed open and
+ * blocked every ask until the 90s timeout.
+ */
+function reduceCancelDeclaration(
+  state: GameState,
+  action: Extract<Action, { type: "CANCEL_DECLARATION" }>,
+): ReduceResult {
+  const window = state.declarationWindow;
+  if (!window) return fail("NO_DECLARATION_WINDOW");
+
+  const player = findPlayer(state, action.playerId);
+  if (!player) return fail("INVALID_TARGET");
+  if (player.teamId !== window.teamId) return fail("WRONG_TEAM");
+
+  // A teammate who has taken control is mid-declaration; only they may back out.
+  if (window.claimedBy && window.claimedBy !== player.id) return fail("NOT_CLAIMANT");
+
+  const next: GameState = { ...state };
+  delete next.declarationWindow;
+
+  // The turn returns to whoever opened it, exactly as on expiry.
+  const resolved = resolveTurnForPlayer(next, window.openedBy, "PLAYER_EMPTY");
+
+  return commit({ ...next, turn: resolved.turn }, [
+    { type: "DECLARATION_WINDOW_CLOSED", teamId: window.teamId, reason: "EXPIRED" },
+  ]);
+}
+
 function reduceExpireDeclaration(
   state: GameState,
   action: Extract<Action, { type: "EXPIRE_DECLARATION" }>,
@@ -561,6 +591,8 @@ export function reduce(state: GameState, action: Action): ReduceResult {
       return reduceClaimDeclaration(state, action);
     case "RELEASE_DECLARATION":
       return reduceReleaseDeclaration(state, action);
+    case "CANCEL_DECLARATION":
+      return reduceCancelDeclaration(state, action);
     case "DECLARE":
       return reduceDeclare(state, action);
     case "EXPIRE_DECLARATION":

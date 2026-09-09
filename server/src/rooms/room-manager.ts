@@ -14,6 +14,7 @@ import {
   ROOM_IDLE_TTL_MS,
   ROOM_MAX_LIFETIME_MS,
   DEFAULT_PLAYER_COUNT,
+  type BotDifficulty,
   type ChatMessage,
   type PlayerCount,
   type ErrorCode,
@@ -159,6 +160,76 @@ export class RoomManager {
     return { room, player };
   }
 
+  // -------------------------------------------------------------------------
+  // Bots (§73)
+  // -------------------------------------------------------------------------
+
+  private static readonly BOT_NAMES = [
+    "Hulk", "Thor", "Batman", "Spiderman", "Ironman", "Loki", "Thanos", "Flash",
+  ];
+
+  /** §73: a bot occupies a real seat with a real hand, but has no socket. */
+  addBot(
+    roomId: string,
+    difficulty: BotDifficulty,
+    teamId?: TeamId,
+  ): { room: GameRoom; player: RoomPlayer } | { error: ErrorCode } {
+    const room = this.rooms.get(roomId);
+    if (!room) return { error: "ROOM_NOT_FOUND" };
+    if (room.status !== "LOBBY") return { error: "NOT_IN_LOBBY" };
+    if (room.players.length >= room.playerCount) return { error: "ROOM_FULL" };
+    if (teamId && this.teamMembers(room, teamId).length >= room.playerCount / 2) {
+      return { error: "TEAM_FULL" };
+    }
+
+    const taken = new Set(room.players.map((p) => p.seatPosition));
+    let seat = 1;
+    while (taken.has(seat)) seat += 1;
+
+    const used = new Set(room.players.map((p) => p.name));
+    const name =
+      RoomManager.BOT_NAMES.find((n) => !used.has(n)) ?? `Bot ${room.players.length + 1}`;
+
+    const player: RoomPlayer = {
+      id: randomUUID(),
+      name,
+      seatPosition: seat,
+      connected: true,
+      // Never used — a bot has no socket to authenticate — but the field is
+      // required and must not be guessable.
+      sessionToken: randomUUID(),
+      bot: { difficulty },
+      ...(teamId ? { teamId } : {}),
+    };
+
+    room.players.push(player);
+    room.players.sort((a, b) => a.seatPosition - b.seatPosition);
+    this.touch(room);
+    return { room, player };
+  }
+
+  removeBot(roomId: string, playerId: string): GameRoom | { error: ErrorCode } {
+    const room = this.rooms.get(roomId);
+    if (!room) return { error: "ROOM_NOT_FOUND" };
+    if (room.status !== "LOBBY") return { error: "NOT_IN_LOBBY" };
+
+    const player = room.players.find((p) => p.id === playerId);
+    if (!player?.bot) return { error: "INVALID_TARGET" };
+
+    room.players = room.players.filter((p) => p.id !== playerId);
+    this.touch(room);
+    return room;
+  }
+
+  botsIn(room: GameRoom): RoomPlayer[] {
+    return room.players.filter((p) => p.bot);
+  }
+
+  /** §54: a room of nothing but bots is abandoned and must not be kept alive. */
+  hasHumans(room: GameRoom): boolean {
+    return room.players.some((p) => !p.bot);
+  }
+
   /** §35: resume a seat with a session token. */
   reconnect(
     roomId: string,
@@ -228,7 +299,7 @@ export class RoomManager {
     if (host?.connected) return false;
 
     const candidate = room.players
-      .filter((p) => p.connected)
+      .filter((p) => p.connected && !p.bot)
       .sort((a, b) => a.seatPosition - b.seatPosition)[0];
 
     if (!candidate || candidate.id === room.hostId) return false;
@@ -379,7 +450,8 @@ export class RoomManager {
    * than immediately or never.
    */
   private scheduleEmptyRoomCloseIfNeeded(room: GameRoom): void {
-    const anyConnected = room.players.some((p) => p.connected);
+    // §73: bots are always "connected", so they must not hold a room open.
+    const anyConnected = room.players.some((p) => p.connected && !p.bot);
     if (anyConnected) {
       this.cancelTimer(room.id, "empty");
       return;
@@ -387,7 +459,7 @@ export class RoomManager {
     this.setTimer(room.id, "empty", EMPTY_ROOM_TIMEOUT_MS, () => {
       const current = this.rooms.get(room.id);
       if (!current) return;
-      if (current.players.some((p) => p.connected)) return;
+      if (current.players.some((p) => p.connected && !p.bot)) return;
       this.closeRoom(room.id, "EMPTY");
     });
   }

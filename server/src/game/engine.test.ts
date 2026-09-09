@@ -330,6 +330,50 @@ describe("declaration window (§62.4)", () => {
     expect(r.state.teamScores).toEqual({ A: 0, B: 0 });
   });
 
+  it("lets the opener cancel and ask again (§62.4)", () => {
+    const g = makeGame({ alice: ["H-2"], bob: ["H-5"] });
+    const opened = open(g).state;
+    // The bug: while a window is open, asking is blocked.
+    expect(err(reduce(opened, { type: "ASK", playerId: "alice", targetId: "bob", cardId: "H-5" })))
+      .toBe("DECLARATION_IN_PROGRESS");
+
+    const cancelled = ok(reduce(opened, { type: "CANCEL_DECLARATION", playerId: "alice" })).state;
+    expect(cancelled.declarationWindow).toBeUndefined();
+    expect(cancelled.turn).toEqual({ kind: "PLAYER", playerId: "alice" });
+
+    // And the turn is usable again.
+    const r = ok(reduce(cancelled, {
+      type: "ASK", playerId: "alice", targetId: "bob", cardId: "H-5",
+    }));
+    expect(r.state.lastAsk?.result).toBe("SUCCESS");
+  });
+
+  it("cancelling costs nothing (§62.4)", () => {
+    const g = makeGame({ alice: ["H-2"], bob: ["H-5"] });
+    const cancelled = ok(reduce(open(g).state, {
+      type: "CANCEL_DECLARATION", playerId: "alice",
+    })).state;
+    expect(cancelled.teamScores).toEqual({ A: 0, B: 0 });
+    expect(cancelled.resolvedSets).toHaveLength(0);
+  });
+
+  it("refuses a cancel from the opposing team", () => {
+    const g = makeGame({ alice: ["H-2"], bob: ["H-5"] });
+    expect(err(reduce(open(g).state, { type: "CANCEL_DECLARATION", playerId: "bob" })))
+      .toBe("WRONG_TEAM");
+  });
+
+  it("refuses a cancel while a teammate holds the claim", () => {
+    const g = makeGame({ alice: ["H-2"], bob: ["H-5"], carol: ["S-3"], erin: ["D-4"] });
+    const claimed = ok(reduce(open(g).state, {
+      type: "CLAIM_DECLARATION", playerId: "carol",
+    })).state;
+    expect(err(reduce(claimed, { type: "CANCEL_DECLARATION", playerId: "erin" })))
+      .toBe("NOT_CLAIMANT");
+    // The claimant may back out themselves.
+    expect(ok(reduce(claimed, { type: "CANCEL_DECLARATION", playerId: "carol" })).ok).toBe(true);
+  });
+
   it("blocks asking while a window is open", () => {
     const s = open(makeGame({ alice: ["H-2"], bob: ["H-5"] })).state;
     expect(err(reduce(s, { type: "ASK", playerId: "alice", targetId: "bob", cardId: "H-5" })))

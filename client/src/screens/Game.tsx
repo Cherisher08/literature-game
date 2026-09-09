@@ -260,7 +260,8 @@ export function GameScreen() {
         <DeclareDialog
           game={game}
           onClose={() => {
-            void api.releaseDeclaration();
+            // §62.4: backing out must close the window, or asking stays blocked.
+            void api.cancelDeclaration();
             setDeclareOpen(false);
           }}
           onDeclare={async (setId, assignments) => {

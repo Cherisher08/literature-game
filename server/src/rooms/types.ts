@@ -7,6 +7,7 @@
  */
 
 import type {
+  BotDifficulty,
   ChatMessage,
   GameState,
   PlayerCount,
@@ -26,6 +27,8 @@ export interface RoomPlayer {
   sessionToken: string;
   /** Set while connected; used to target this player's socket. */
   socketId?: string;
+  /** §73: bot seats have no socket and are driven server-side. */
+  bot?: { difficulty: BotDifficulty };
   disconnectedAt?: number;
 }
 

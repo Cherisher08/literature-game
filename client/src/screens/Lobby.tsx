@@ -7,8 +7,8 @@
  */
 
 import { useState } from "react";
-import { Check, Copy, Crown, LogOut, LogIn, Play, Repeat2, Users } from "lucide-react";
-import type { PublicPlayer, TeamId } from "@memory-game/shared";
+import { Bot, Check, Copy, Crown, LogOut, LogIn, Play, Repeat2, Users, X } from "lucide-react";
+import { BOT_DIFFICULTIES, type BotDifficulty, type PublicPlayer, type TeamId } from "@memory-game/shared";
 import { api } from "../socket/client.js";
 import { clearSession, useGame, useIsHost, useMe } from "../store/useGame.js";
 import { describe } from "./NameAndHome.js";
@@ -25,6 +25,7 @@ export function LobbyScreen() {
 
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [botLevel, setBotLevel] = useState<BotDifficulty>("MEDIUM");
 
   const seats = room.playerCount;
   const half = seats / 2;
@@ -45,6 +46,18 @@ export function LobbyScreen() {
   async function pick(teamId: TeamId | null) {
     setError(null);
     const res = await api.selectTeam(teamId);
+    if (!("ok" in res) || !res.ok) setError(describe(res));
+  }
+
+  async function addBot(difficulty: BotDifficulty, teamId?: TeamId) {
+    setError(null);
+    const res = await api.addBot(difficulty, teamId);
+    if (!("ok" in res) || !res.ok) setError(describe(res));
+  }
+
+  async function removeBot(playerId: string) {
+    setError(null);
+    const res = await api.removeBot(playerId);
     if (!("ok" in res) || !res.ok) setError(describe(res));
   }
 
@@ -107,17 +120,15 @@ export function LobbyScreen() {
             const full = members.length >= half;
             const blocked = full && !mine;
 
+            // A container, not a button: the member rows carry their own remove
+            // controls, and a button may not contain another button.
             return (
-              <button
+              <div
                 key={teamId}
-                onClick={() => void pick(teamId)}
-                disabled={blocked}
-                aria-pressed={mine}
-                className="relative rounded-2xl border-2 p-4 text-left transition-colors disabled:cursor-not-allowed"
+                className="flex flex-col rounded-2xl border-2 p-3 transition-colors"
                 style={{
                   borderColor: mine ? "var(--accent)" : "var(--border)",
                   background: mine ? "rgba(251,191,36,.08)" : "var(--surface)",
-                  opacity: blocked ? 0.55 : 1,
                   transitionDuration: "var(--dur-fast)",
                 }}
               >
@@ -134,34 +145,54 @@ export function LobbyScreen() {
                   </span>
                 </div>
 
-                <div className="min-h-[72px] space-y-1.5">
+                <div className="mb-2 min-h-[72px] space-y-1.5">
                   {members.map((p) => (
-                    <MemberRow key={p.id} player={p} hostId={room.hostId} meId={me?.id} />
+                    <MemberRow
+                      key={p.id}
+                      player={p}
+                      hostId={room.hostId}
+                      meId={me?.id}
+                      {...(isHost && p.isBot
+                        ? { onRemove: () => void removeBot(p.id) }
+                        : {})}
+                    />
                   ))}
                   {members.length === 0 && (
-                    <span className="text-xs text-[var(--text-muted)]">Empty — tap to join</span>
+                    <span className="text-xs text-[var(--text-muted)]">Nobody yet</span>
                   )}
                 </div>
 
-                {/* A disabled control must say why (§71.4). */}
-                <div className="mt-2 h-4 text-[11px] font-semibold">
+                {/* §71.4: a disabled control states why. */}
+                <button
+                  onClick={() => void pick(teamId)}
+                  disabled={blocked || mine}
+                  className="mt-auto w-full rounded-lg border px-2 py-1.5 text-[11px] font-semibold disabled:cursor-default"
+                  style={{
+                    borderColor: mine ? "var(--accent)" : "var(--border)",
+                    color: mine
+                      ? "var(--accent)"
+                      : blocked
+                        ? "var(--team-them)"
+                        : "var(--text)",
+                    background: mine ? "transparent" : "rgba(255,255,255,.04)",
+                    opacity: blocked ? 0.6 : 1,
+                  }}
+                >
                   {mine ? (
-                    <span className="flex items-center gap-1 text-[var(--accent)]">
+                    <span className="flex items-center justify-center gap-1">
                       <Check size={12} /> You're here
                     </span>
                   ) : blocked ? (
-                    <span className="text-[var(--team-them)]">
-                      Full{bothFull ? " — step out below" : ""}
-                    </span>
+                    <>Full{bothFull ? " — step out below" : ""}</>
                   ) : me?.teamId ? (
-                    <span className="flex items-center gap-1 text-[var(--text-muted)]">
+                    <span className="flex items-center justify-center gap-1">
                       <Repeat2 size={12} /> Switch here
                     </span>
                   ) : (
-                    <span className="text-[var(--text-muted)]">Tap to join</span>
+                    "Join"
                   )}
-                </div>
-              </button>
+                </button>
+              </div>
             );
           })}
         </div>
@@ -222,6 +253,69 @@ export function LobbyScreen() {
         )}
       </section>
 
+      {/* §73: bots fill empty seats, on a chosen side. Host only, lobby only. */}
+      {isHost && missing > 0 && (
+        <section className="rounded-xl border border-dashed border-[var(--border)] p-3">
+          <div className="mb-2 flex items-center gap-1.5">
+            <Bot size={14} className="text-[var(--accent)]" />
+            <h2 className="text-sm font-semibold">Add a bot</h2>
+            <span className="ml-auto text-[11px] text-[var(--text-muted)]">
+              {missing} seat{missing === 1 ? "" : "s"} free
+            </span>
+          </div>
+
+          <div className="mb-2 grid grid-cols-3 gap-1.5">
+            {BOT_DIFFICULTIES.map((d) => {
+              const active = botLevel === d;
+              return (
+                <button
+                  key={d}
+                  onClick={() => setBotLevel(d)}
+                  aria-pressed={active}
+                  className="rounded-lg border px-2 py-1.5 text-xs font-semibold"
+                  style={{
+                    borderColor: active ? "var(--accent)" : "var(--border)",
+                    background: active ? "rgba(251,191,36,.1)" : "var(--surface)",
+                  }}
+                >
+                  {d === "EASY" ? "Easy" : d === "MEDIUM" ? "Medium" : "Hard"}
+                  <div className="text-[10px] font-normal text-[var(--text-muted)]">
+                    {d === "EASY" ? "own hand" : d === "MEDIUM" ? "remembers" : "deduces"}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="grid grid-cols-3 gap-1.5">
+            {(["A", "B"] as TeamId[]).map((teamId) => {
+              const full =
+                (teamId === "A" ? teamA : teamB).length >= half;
+              return (
+                <button
+                  key={teamId}
+                  onClick={() => void addBot(botLevel, teamId)}
+                  disabled={full}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-2 text-xs font-semibold disabled:opacity-40"
+                >
+                  + {TEAM_LABEL[teamId]}
+                  {full && (
+                    <div className="text-[10px] font-normal text-[var(--team-them)]">full</div>
+                  )}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => void addBot(botLevel)}
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-2 text-xs font-semibold"
+            >
+              + No team
+              <div className="text-[10px] font-normal text-[var(--text-muted)]">auto</div>
+            </button>
+          </div>
+        </section>
+      )}
+
       <div className="mt-auto space-y-3">
         {isHost ? (
           <>
@@ -257,10 +351,12 @@ function MemberRow({
   player,
   hostId,
   meId,
+  onRemove,
 }: {
   player: PublicPlayer;
   hostId: string;
   meId: string | undefined;
+  onRemove?: () => void;
 }) {
   const isMe = player.id === meId;
   return (
@@ -268,10 +364,28 @@ function MemberRow({
       {player.id === hostId && (
         <Crown size={12} className="shrink-0 text-[var(--accent)]" aria-label="Host" />
       )}
+      {player.isBot && <Bot size={12} className="shrink-0 text-[var(--text-muted)]" />}
       <span className={`truncate ${isMe ? "font-bold text-[var(--accent)]" : ""}`}>
         {player.name}
         {isMe ? " (you)" : ""}
       </span>
+      {player.isBot && player.difficulty && (
+        <span className="shrink-0 text-[10px] text-[var(--text-muted)]">
+          {player.difficulty.toLowerCase()}
+        </span>
+      )}
+      {onRemove && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          aria-label={`Remove ${player.name}`}
+          className="ml-auto shrink-0 rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--team-them)]"
+        >
+          <X size={12} />
+        </button>
+      )}
     </div>
   );
 }

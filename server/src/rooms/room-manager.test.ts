@@ -309,6 +309,88 @@ describe("lobby team selection (§71)", () => {
   });
 });
 
+describe("bots (§73)", () => {
+  it("adds a bot to a chosen team", () => {
+    const m = mgr();
+    const { room } = m.createRoom("Host", "s0");
+    const r = m.addBot(room.id, "HARD", "B");
+    if ("error" in r) throw new Error(r.error);
+    expect(r.player.bot?.difficulty).toBe("HARD");
+    expect(r.player.teamId).toBe("B");
+    expect(r.player.socketId).toBeUndefined();
+  });
+
+  it("respects the per-team cap", () => {
+    const m = mgr();
+    const { room } = m.createRoom("Host", "s0");
+    const half = room.playerCount / 2;
+    for (let i = 0; i < half; i++) {
+      expect("error" in m.addBot(room.id, "EASY", "B")).toBe(false);
+    }
+    expect(m.addBot(room.id, "EASY", "B")).toEqual({ error: "TEAM_FULL" });
+  });
+
+  it("respects room capacity", () => {
+    const m = mgr();
+    const { room } = m.createRoom("Host", "s0");
+    for (let i = 1; i < room.playerCount; i++) {
+      expect("error" in m.addBot(room.id, "EASY")).toBe(false);
+    }
+    expect(m.addBot(room.id, "EASY")).toEqual({ error: "ROOM_FULL" });
+  });
+
+  it("refuses to add or remove bots once the game has started (§6)", () => {
+    const m = mgr();
+    const { room } = m.createRoom("Host", "s0");
+    const bot = m.addBot(room.id, "EASY");
+    if ("error" in bot) throw new Error(bot.error);
+    room.status = "PLAYING";
+    expect(m.addBot(room.id, "EASY")).toEqual({ error: "NOT_IN_LOBBY" });
+    expect(m.removeBot(room.id, bot.player.id)).toEqual({ error: "NOT_IN_LOBBY" });
+  });
+
+  it("removes a bot but never a human", () => {
+    const m = mgr();
+    const { room, player: host } = m.createRoom("Host", "s0");
+    const bot = m.addBot(room.id, "EASY");
+    if ("error" in bot) throw new Error(bot.error);
+
+    expect(m.removeBot(room.id, host.id)).toEqual({ error: "INVALID_TARGET" });
+    expect("error" in m.removeBot(room.id, bot.player.id)).toBe(false);
+    expect(room.players).toHaveLength(1);
+  });
+
+  it("gives every bot a distinct name", () => {
+    const m = mgr();
+    const { room } = m.createRoom("Host", "s0");
+    for (let i = 1; i < room.playerCount; i++) m.addBot(room.id, "EASY");
+    const names = room.players.filter((p) => p.bot).map((p) => p.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("never makes a bot the host (§59.1)", () => {
+    const m = mgr();
+    const { room, player: host } = m.createRoom("Host", "s0");
+    const second = m.joinRoom(room.id, "P1", "s1");
+    if ("error" in second) throw new Error("join failed");
+    m.addBot(room.id, "HARD");
+
+    m.markDisconnected(room.id, host.id);
+    expect(room.hostId).toBe(second.player.id);
+  });
+
+  it("does not let bots keep an abandoned room alive (§54)", () => {
+    vi.useFakeTimers();
+    const m = mgr();
+    const { room, player } = m.createRoom("Host", "s0");
+    m.addBot(room.id, "EASY");
+
+    m.markDisconnected(room.id, player.id);
+    vi.advanceTimersByTime(120_000 + 10);
+    expect(m.get(room.id)).toBeUndefined();
+  });
+});
+
 describe("chat (§28, §58)", () => {
   it("assigns id, author and timestamp on the server", () => {
     const m = mgr();

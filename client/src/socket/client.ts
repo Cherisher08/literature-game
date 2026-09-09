@@ -116,11 +116,26 @@ export const api = {
       payload: {},
     }),
 
+  cancelDeclaration: () =>
+    request<"game:declaration-cancel", VoidAck>("game:declaration-cancel", {
+      actionId: newActionId(),
+      payload: {},
+    }),
+
   declare: (setId: number, assignments: Array<{ cardId: string; playerId: string }>) =>
     request<"game:declare-set", VoidAck>("game:declare-set", {
       actionId: newActionId(),
       payload: { setId, assignments },
     }),
+
+  addBot: (difficulty: "EASY" | "MEDIUM" | "HARD", teamId?: "A" | "B") =>
+    request<"room:add-bot", VoidAck>("room:add-bot", {
+      difficulty,
+      ...(teamId ? { teamId } : {}),
+    }),
+
+  removeBot: (playerId: string) =>
+    request<"room:remove-bot", VoidAck>("room:remove-bot", { playerId }),
 
   voiceToken: () => request<"voice:token", Ack<VoiceCredentials>>("voice:token"),
 

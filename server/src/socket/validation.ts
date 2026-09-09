@@ -99,6 +99,13 @@ export const selectTeamSchema = z.object({
   teamId: z.enum(["A", "B"]).nullable(),
 });
 
+export const addBotSchema = z.object({
+  difficulty: z.enum(["EASY", "MEDIUM", "HARD"]),
+  teamId: z.enum(["A", "B"]).optional(),
+});
+
+export const removeBotSchema = z.object({ playerId: z.string().min(1).max(64) });
+
 export const voiceStateSchema = z.object({ connected: z.boolean() });
 
 export const emptyEnvelopeSchema = envelope(z.object({}).strict());

@@ -23,6 +23,7 @@ import { deal } from "../game/shuffle.js";
 import { projectRoomFor } from "../rooms/projection.js";
 import type { RoomManager } from "../rooms/room-manager.js";
 import type { GameRoom } from "../rooms/types.js";
+import { BotRunner } from "../bots/runner.js";
 import { isVoiceConfigured, mintVoiceToken } from "../voice/livekit.js";
 import { RateLimiter, dedupeGet, dedupeSet } from "./rate-limit.js";
 import {
@@ -31,8 +32,10 @@ import {
   createRoomSchema,
   declareSchema,
   emptyEnvelopeSchema,
+  addBotSchema,
   joinRoomSchema,
   parse,
+  removeBotSchema,
   selectTeamSchema,
   voiceStateSchema,
 } from "./validation.js";
@@ -70,7 +73,20 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
       io.to(room.id).emit("game:event", event, seq);
     }
     broadcastState(room);
+    // §73: a bot may now be on turn. Safe to call after every mutation.
+    bots.schedule(room);
   }
+
+  // §73: bots publish through exactly the same path a human move does.
+  const bots = new BotRunner(rooms, {
+    publish: (room, events) => {
+      for (const event of events) {
+        const seq = rooms.nextSeq(room);
+        io.to(room.id).emit("game:event", event, seq);
+      }
+      broadcastState(room);
+    },
+  });
 
   function currentRoom(socket: GameSocket): GameRoom | undefined {
     const { roomId } = socket.data;
@@ -192,6 +208,41 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
       ack({ ok: true });
     });
 
+    /** §73: host-only bot management, lobby only. */
+    socket.on("room:add-bot", (raw, ack) => {
+      if (!actionLimiter.allow(socket.id)) return ack(deny("RATE_LIMITED"));
+      const input = parse(addBotSchema, raw);
+      if (!input) return ack(deny("NOT_IN_LOBBY"));
+
+      const room = currentRoom(socket);
+      const playerId = socket.data.playerId;
+      if (!room || !playerId) return ack(deny("ROOM_NOT_FOUND"));
+      if (room.hostId !== playerId) return ack(deny("NOT_HOST"));
+
+      const result = rooms.addBot(room.id, input.difficulty, input.teamId);
+      if ("error" in result) return ack(deny(result.error));
+
+      broadcastState(result.room);
+      ack({ ok: true });
+    });
+
+    socket.on("room:remove-bot", (raw, ack) => {
+      if (!actionLimiter.allow(socket.id)) return ack(deny("RATE_LIMITED"));
+      const input = parse(removeBotSchema, raw);
+      if (!input) return ack(deny("INVALID_TARGET"));
+
+      const room = currentRoom(socket);
+      const playerId = socket.data.playerId;
+      if (!room || !playerId) return ack(deny("ROOM_NOT_FOUND"));
+      if (room.hostId !== playerId) return ack(deny("NOT_HOST"));
+
+      const result = rooms.removeBot(room.id, input.playerId);
+      if ("error" in result) return ack(deny(result.error));
+
+      broadcastState(result);
+      ack({ ok: true });
+    });
+
     /** §68.5: full-state recovery after a detected gap. */
     socket.on("room:resync", (ack) => {
       const room = currentRoom(socket);
@@ -250,6 +301,8 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
       rooms.touch(room);
 
       broadcastState(room);
+      // §73: the first player may be a bot.
+      bots.schedule(room);
       ack({ ok: true });
     });
 
@@ -322,6 +375,22 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
       withEnvelope(socket, input.actionId, ack, (room, playerId) => {
         if (!room.game) return deny("GAME_ALREADY_STARTED");
         const result = reduce(room.game, { type: "RELEASE_DECLARATION", playerId });
+        if (!result.ok) return deny(result.error);
+
+        room.game = result.state;
+        rooms.touch(room);
+        broadcastEvents(room, result.events);
+        return { ok: true };
+      });
+    });
+
+    socket.on("game:declaration-cancel", (raw, ack) => {
+      const input = parse(emptyEnvelopeSchema, raw);
+      if (!input) return ack(deny("MALFORMED_DECLARATION"));
+
+      withEnvelope(socket, input.actionId, ack, (room, playerId) => {
+        if (!room.game) return deny("GAME_ALREADY_STARTED");
+        const result = reduce(room.game, { type: "CANCEL_DECLARATION", playerId });
         if (!result.ok) return deny(result.error);
 
         room.game = result.state;

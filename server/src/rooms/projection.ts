@@ -30,6 +30,8 @@ function lobbyPlayer(room: GameRoom, playerId: string): PublicPlayer {
     connected: p.connected,
     cardCount: 0,
     spectating: false,
+    isBot: Boolean(p.bot),
+    ...(p.bot ? { difficulty: p.bot.difficulty } : {}),
   };
 }
 
@@ -48,6 +50,8 @@ function publicPlayers(room: GameRoom, game: GameState | undefined): PublicPlaye
       cardCount: p.hand.length,
       // §62.1: derived, never latched.
       spectating: p.hand.length === 0,
+      isBot: Boolean(roomPlayer?.bot),
+      ...(roomPlayer?.bot ? { difficulty: roomPlayer.bot.difficulty } : {}),
     };
   });
 }

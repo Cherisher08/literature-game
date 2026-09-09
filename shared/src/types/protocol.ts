@@ -10,6 +10,7 @@
 import type { Card, SetId } from "./cards.js";
 import type {
   AskingRule,
+  BotDifficulty,
   DeclarationWindow,
   GameEvent,
   LastAsk,
@@ -36,6 +37,10 @@ export interface PublicPlayer {
   cardCount: number;
   /** §62.1: derived from cardCount, never stored. */
   spectating: boolean;
+  /** §73: true for a bot-controlled seat. */
+  isBot: boolean;
+  /** Present only for bots. */
+  difficulty?: BotDifficulty;
 }
 
 export type RoomStatus = "LOBBY" | "PLAYING" | "FINISHED";
@@ -158,6 +163,15 @@ export interface VoiceState {
   participants: string[];
 }
 
+export interface AddBotPayload {
+  difficulty: BotDifficulty;
+  teamId?: TeamId;
+}
+
+export interface RemoveBotPayload {
+  playerId: string;
+}
+
 export interface SelectTeamPayload {
   /** null steps out to the unassigned pool (§71.5). */
   teamId: TeamId | null;
@@ -182,6 +196,9 @@ export interface ClientToServerEvents {
   "room:resync": (ack: (r: Ack<ClientRoomState>) => void) => void;
   "room:select-team": (p: SelectTeamPayload, ack: (r: VoidAck) => void) => void;
   /** §69.3: mints a short-lived, single-room join token. */
+  /** §73: host-only. */
+  "room:add-bot": (p: AddBotPayload, ack: (r: VoidAck) => void) => void;
+  "room:remove-bot": (p: RemoveBotPayload, ack: (r: VoidAck) => void) => void;
   "voice:token": (ack: (r: Ack<VoiceCredentials>) => void) => void;
   /** Advisory presence only; the engine never reads it (§69.4). */
   "voice:state": (p: { connected: boolean }, ack: (r: VoidAck) => void) => void;
@@ -190,6 +207,7 @@ export interface ClientToServerEvents {
   "game:declaration-open": (e: ActionEnvelope<Record<string, never>>, ack: (r: VoidAck) => void) => void;
   "game:declaration-claim": (e: ActionEnvelope<Record<string, never>>, ack: (r: VoidAck) => void) => void;
   "game:declaration-release": (e: ActionEnvelope<Record<string, never>>, ack: (r: VoidAck) => void) => void;
+  "game:declaration-cancel": (e: ActionEnvelope<Record<string, never>>, ack: (r: VoidAck) => void) => void;
   "game:declare-set": (e: ActionEnvelope<DeclarePayload>, ack: (r: VoidAck) => void) => void;
   "chat:send": (e: ActionEnvelope<ChatSendPayload>, ack: (r: VoidAck) => void) => void;
 }
