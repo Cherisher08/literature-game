@@ -43,6 +43,11 @@ export interface GameRoom {
   lastActivityAt: number;
   /** §68.6: monotonic; every broadcast carries it so clients detect gaps. */
   seq: number;
+  /**
+   * §69.4: player ids currently in the voice channel. Advisory only — it
+   * mirrors a separate system that can desync, so no rule may consult it.
+   */
+  voiceParticipants: string[];
 }
 
 /**

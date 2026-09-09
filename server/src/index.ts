@@ -5,8 +5,10 @@
  * sticky routing by room id; that is a deliberate limit, not an oversight.
  */
 
+import { networkInterfaces } from "node:os";
 import { createGameApp } from "./app.js";
 import { config } from "./config.js";
+import { isVoiceConfigured } from "./voice/livekit.js";
 
 const { httpServer, rooms, close } = createGameApp();
 
@@ -38,8 +40,26 @@ httpServer.on("error", (err: NodeJS.ErrnoException) => {
   throw err;
 });
 
-httpServer.listen(config.port, () => {
-  console.log(`[server] listening on :${config.port}`);
+/** First non-internal IPv4 address, for the "open this on your phone" line. */
+function lanAddress(): string | undefined {
+  for (const addrs of Object.values(networkInterfaces())) {
+    for (const a of addrs ?? []) {
+      if (a.family === "IPv4" && !a.internal) return a.address;
+    }
+  }
+  return undefined;
+}
+
+// 0.0.0.0 so other devices on the network can reach it.
+httpServer.listen(config.port, "0.0.0.0", () => {
+  const lan = lanAddress();
+  console.log(`[server] listening on http://localhost:${config.port}`);
+  if (lan) console.log(`[server] network:   http://${lan}:${config.port}`);
+  console.log(
+    isVoiceConfigured()
+      ? `[server] voice:     enabled (${config.livekit.url})`
+      : "[server] voice:     disabled — set LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET in .env",
+  );
 });
 
 async function shutdown(signal: string): Promise<void> {

@@ -23,6 +23,7 @@ import { deal } from "../game/shuffle.js";
 import { projectRoomFor } from "../rooms/projection.js";
 import type { RoomManager } from "../rooms/room-manager.js";
 import type { GameRoom } from "../rooms/types.js";
+import { isVoiceConfigured, mintVoiceToken } from "../voice/livekit.js";
 import { RateLimiter, dedupeGet, dedupeSet } from "./rate-limit.js";
 import {
   askCardSchema,
@@ -33,6 +34,7 @@ import {
   joinRoomSchema,
   parse,
   selectTeamSchema,
+  voiceStateSchema,
 } from "./validation.js";
 
 export type GameServer = Server<ClientToServerEvents, ServerToClientEvents, never, SocketData>;
@@ -352,6 +354,40 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
     });
 
     // -----------------------------------------------------------------------
+    // Voice (§29, §30, §69) — entirely optional; the game never depends on it
+    // -----------------------------------------------------------------------
+
+    socket.on("voice:token", async (ack) => {
+      if (!actionLimiter.allow(socket.id)) return ack(deny("RATE_LIMITED"));
+      if (!isVoiceConfigured()) return ack(deny("VOICE_UNAVAILABLE"));
+
+      const room = currentRoom(socket);
+      const playerId = socket.data.playerId;
+      if (!room || !playerId) return ack(deny("ROOM_NOT_FOUND"));
+
+      const player = room.players.find((p) => p.id === playerId);
+      if (!player) return ack(deny("ROOM_NOT_FOUND"));
+
+      // §30: the token admits this player to this room's channel and no other.
+      const creds = await mintVoiceToken(room.id, player.id, player.name);
+      if (!creds) return ack(deny("VOICE_UNAVAILABLE"));
+      ack({ ok: true, data: creds });
+    });
+
+    socket.on("voice:state", (raw, ack) => {
+      const input = parse(voiceStateSchema, raw);
+      if (!input) return ack(deny("RATE_LIMITED"));
+
+      const room = currentRoom(socket);
+      const playerId = socket.data.playerId;
+      if (!room || !playerId) return ack(deny("ROOM_NOT_FOUND"));
+
+      rooms.setVoicePresence(room, playerId, input.connected);
+      io.to(room.id).emit("voice:participants", [...room.voiceParticipants]);
+      ack({ ok: true });
+    });
+
+    // -----------------------------------------------------------------------
     // Chat (§28, §58) — room-wide only, never a teammate channel (§17)
     // -----------------------------------------------------------------------
 
@@ -389,6 +425,7 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
       if (!room) return;
 
       if (room.hostId !== before) io.to(room.id).emit("room:host-changed", room.hostId);
+      io.to(room.id).emit("voice:participants", [...room.voiceParticipants]);
       broadcastState(room);
     });
   });

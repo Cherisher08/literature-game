@@ -65,6 +65,8 @@ export interface ClientRoomState {
   status: RoomStatus;
   /** §72: chosen when the room is created; join capacity and deck follow it. */
   playerCount: number;
+  /** §69.4: advisory. Nothing in the rules may depend on it. */
+  voice: VoiceState;
   players: PublicPlayer[];
   /** Present only once the game has started. */
   game?: ClientGameState;
@@ -142,6 +144,20 @@ export interface ChatSendPayload {
   message: string;
 }
 
+/** §69: credentials for one player in one room. */
+export interface VoiceCredentials {
+  url: string;
+  token: string;
+  room: string;
+}
+
+export interface VoiceState {
+  /** False when the server has no LiveKit credentials (§69). */
+  available: boolean;
+  /** Player ids currently connected to the room's voice channel. */
+  participants: string[];
+}
+
 export interface SelectTeamPayload {
   /** null steps out to the unassigned pool (§71.5). */
   teamId: TeamId | null;
@@ -165,6 +181,10 @@ export interface ClientToServerEvents {
   "room:leave": (ack: (r: VoidAck) => void) => void;
   "room:resync": (ack: (r: Ack<ClientRoomState>) => void) => void;
   "room:select-team": (p: SelectTeamPayload, ack: (r: VoidAck) => void) => void;
+  /** §69.3: mints a short-lived, single-room join token. */
+  "voice:token": (ack: (r: Ack<VoiceCredentials>) => void) => void;
+  /** Advisory presence only; the engine never reads it (§69.4). */
+  "voice:state": (p: { connected: boolean }, ack: (r: VoidAck) => void) => void;
   "game:start": (ack: (r: VoidAck) => void) => void;
   "game:ask-card": (e: ActionEnvelope<AskCardPayload>, ack: (r: VoidAck) => void) => void;
   "game:declaration-open": (e: ActionEnvelope<Record<string, never>>, ack: (r: VoidAck) => void) => void;
@@ -183,6 +203,7 @@ export interface ServerToClientEvents {
   "room:closed": (reason: "EMPTY" | "EXPIRED") => void;
   "game:event": (e: GameEvent, seq: number) => void;
   "chat:message": (m: ChatMessage) => void;
+  "voice:participants": (playerIds: string[]) => void;
   error: (e: { error: ErrorCode; message: string }) => void;
 }
 

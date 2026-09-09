@@ -36,6 +36,8 @@ export type ErrorCode =
   | "DECLARATION_TAKEN"
   | "NO_DECLARATION_WINDOW"
   | "NOT_CLAIMANT"
+  // Voice (§69)
+  | "VOICE_UNAVAILABLE"
   // Abuse
   | "RATE_LIMITED";
 
@@ -70,6 +72,8 @@ export const ERROR_MESSAGE: Record<ErrorCode, string> = {
   DECLARATION_TAKEN: "A teammate is already making this declaration.",
   NO_DECLARATION_WINDOW: "Your team has not opened a declaration.",
   NOT_CLAIMANT: "Only the teammate who took the declaration can do that.",
+
+  VOICE_UNAVAILABLE: "Voice chat is not available on this server.",
 
   RATE_LIMITED: "Slow down a moment.",
 };

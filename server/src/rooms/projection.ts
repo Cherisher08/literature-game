@@ -15,6 +15,7 @@ import type {
   GameState,
   PublicPlayer,
 } from "@memory-game/shared";
+import { isVoiceConfigured } from "../voice/livekit.js";
 import type { GameRoom } from "./types.js";
 
 /** Public view of a lobby player, before any game exists. */
@@ -89,6 +90,8 @@ export function projectRoomFor(room: GameRoom, playerId: string): ClientRoomStat
     hostId: room.hostId,
     status: room.status,
     playerCount: room.playerCount,
+    // §69.4: advisory only.
+    voice: { available: isVoiceConfigured(), participants: [...room.voiceParticipants] },
     players: publicPlayers(room, room.game),
     ...(room.game ? { game: projectGameFor(room, room.game, playerId) } : {}),
     seq: room.seq,

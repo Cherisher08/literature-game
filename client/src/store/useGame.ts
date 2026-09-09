@@ -80,6 +80,8 @@ interface GameStore {
   error: string | null;
   /** §61.3: the declaration reveal waiting to be shown. */
   reveal: DeclarationResult | null;
+  /** §69.4: advisory presence; nothing in the game reads it. */
+  voiceParticipants: string[];
   gameOver: { winningTeamId?: TeamId; drawn: boolean; scores: Record<TeamId, number> } | null;
 
   setScreen: (s: Screen) => void;
@@ -93,6 +95,7 @@ interface GameStore {
   noteEvent: (e: GameEvent, seq: number) => boolean;
   addChat: (m: ChatMessage) => void;
   setReveal: (r: DeclarationResult | null) => void;
+  setVoiceParticipants: (ids: string[]) => void;
   setGameOver: (
     g: { winningTeamId?: TeamId; drawn: boolean; scores: Record<TeamId, number> } | null,
   ) => void;
@@ -111,6 +114,7 @@ export const useGame = create<GameStore>((set, get) => ({
   error: null,
   reveal: null,
   gameOver: null,
+  voiceParticipants: [],
 
   setScreen: (screen) => set({ screen }),
   setConnection: (connection) => set({ connection }),
@@ -138,6 +142,7 @@ export const useGame = create<GameStore>((set, get) => ({
   addChat: (m) => set((s) => ({ chat: [...s.chat, m].slice(-200) })),
 
   setReveal: (reveal) => set({ reveal }),
+  setVoiceParticipants: (voiceParticipants) => set({ voiceParticipants }),
   setGameOver: (gameOver) => set({ gameOver }),
 
   reset: () =>
@@ -150,6 +155,7 @@ export const useGame = create<GameStore>((set, get) => ({
       error: null,
       reveal: null,
       gameOver: null,
+      voiceParticipants: [],
     }),
 }));
 

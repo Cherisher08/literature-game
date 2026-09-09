@@ -1825,7 +1825,7 @@ Sections 41–42 list features but not sequence. Building in this order keeps a 
 
 **Phase 5 — Polish.** Rematch, kick, spectators, reactions, PWA (§42).
 
-**Phase 6 — Voice. Last, per §69.1.** Every phase before this assumes voice does not exist, and nothing in them may depend on it. Packages, token scope, lifecycle teardown and hosting are in §69. This phase can be dropped entirely without touching the product definition (§45).
+**Phase 6 — Voice. Built (§69.1), ahead of this ordering.** Every phase before this assumes voice does not exist, and nothing in them may depend on it. Packages, token scope, lifecycle teardown and hosting are in §69. This phase can be dropped entirely without touching the product definition (§45).
 
 Cut candidates if scope needs to shrink: voice (Phase 6) is the largest and least load-bearing, and is already sequenced last for exactly that reason (§69.1). The two things that must not be cut are Section 48's set-membership rule and Section 53's projection contract — the first is the game, and the second is the anti-cheat.
 
@@ -2744,9 +2744,16 @@ Both `actionId` and `seq` are protocol-level concerns and belong in the socket l
 
 # 69. Voice Infrastructure and Hosting
 
-## 69.1 Voice Is the Last Thing Built — Ignore It Until Then
+## 69.1 Voice — Implemented
 
-**Voice chat is deferred to the final phase of development.** It is not part of the initial build, and no earlier phase should be shaped around it.
+> **Status changed.** This section previously deferred voice to the final phase. It has now been built, ahead of that ordering, at the project owner's direction. The deferral did its job in the meantime: nothing in phases 1–5 depends on voice, so adding it required no changes to the rules engine, the projection, or any existing screen.
+
+The constraints below still hold, and are now enforced in code and tests:
+
+- **Voice is optional.** With no LiveKit credentials, `voice.available` is `false`, the control is absent, and the game is unaffected. `voice:token` returns `VOICE_UNAVAILABLE`.
+- **The engine never learns voice exists.** Presence lives on `GameRoom.voiceParticipants`, outside `GameState`, and §57's reducer neither reads nor receives it.
+- **No rule gates on it.** A player with a broken microphone, a failed SFU connection, or voice switched off is a full participant.
+
 
 This is a firm sequencing decision, not a preference:
 
@@ -2761,7 +2768,7 @@ Practical instructions for phases 1–5:
 - **The game must never gate on voice state.** §57's reducer must not know voice exists. If a rule, a turn transition or a UI state ever consults voice, that is a bug introduced in the wrong phase.
 - Section 17's communication policy applies to text chat in the meantime; the voice half activates when voice does.
 
-Everything below this point is reference material for that final phase. It is not work for now.
+The remainder of this section is the implementation contract.
 
 ---
 

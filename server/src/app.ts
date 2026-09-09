@@ -9,6 +9,7 @@ import { Server } from "socket.io";
 import { config } from "./config.js";
 import { RoomManager } from "./rooms/room-manager.js";
 import { registerHandlers, type GameServer } from "./socket/handlers.js";
+import { destroyVoiceRoom } from "./voice/livekit.js";
 
 export interface GameApp {
   httpServer: HttpServer;
@@ -26,7 +27,8 @@ export function createGameApp(): GameApp {
   const rooms = new RoomManager({
     onRoomClosed: (roomId, reason) => {
       io.to(roomId).emit("room:closed", reason);
-      // §30/§69: destroy the room's voice resources here once voice exists.
+      // §30/§54: the voice room must not outlive the game room.
+      void destroyVoiceRoom(roomId);
     },
   });
 

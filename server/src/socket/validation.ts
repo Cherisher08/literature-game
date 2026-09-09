@@ -99,6 +99,8 @@ export const selectTeamSchema = z.object({
   teamId: z.enum(["A", "B"]).nullable(),
 });
 
+export const voiceStateSchema = z.object({ connected: z.boolean() });
+
 export const emptyEnvelopeSchema = envelope(z.object({}).strict());
 
 export const chatSendSchema = envelope(

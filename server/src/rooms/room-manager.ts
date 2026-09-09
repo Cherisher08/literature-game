@@ -75,6 +75,15 @@ export class RoomManager {
     room.lastActivityAt = Date.now();
   }
 
+  /** §69.4: advisory presence. Never consulted by the rules engine. */
+  setVoicePresence(room: GameRoom, playerId: string, connected: boolean): void {
+    const present = room.voiceParticipants.includes(playerId);
+    if (connected && !present) room.voiceParticipants.push(playerId);
+    if (!connected && present) {
+      room.voiceParticipants = room.voiceParticipants.filter((id) => id !== playerId);
+    }
+  }
+
   /** §68.6: bump before every broadcast so clients can detect a gap. */
   nextSeq(room: GameRoom): number {
     room.seq += 1;
@@ -112,6 +121,7 @@ export class RoomManager {
       createdAt: now,
       lastActivityAt: now,
       seq: 0,
+      voiceParticipants: [],
     };
 
     this.rooms.set(id, room);
@@ -181,6 +191,7 @@ export class RoomManager {
     player.connected = false;
     player.disconnectedAt = Date.now();
     delete player.socketId;
+    this.setVoicePresence(room, playerId, false);
 
     this.reassignHostIfNeeded(room);
     this.scheduleEmptyRoomCloseIfNeeded(room);
@@ -193,6 +204,7 @@ export class RoomManager {
     if (!room) return undefined;
 
     room.players = room.players.filter((p) => p.id !== playerId);
+    room.voiceParticipants = room.voiceParticipants.filter((id) => id !== playerId);
     if (room.game) {
       room.game = {
         ...room.game,

@@ -28,6 +28,8 @@ import { PlayerCard } from "../components/PlayerCard.js";
 import { PlayingCard } from "../components/PlayingCard.js";
 import { HalfSuitGrid } from "../components/HalfSuitGrid.js";
 import { ChatDock } from "../components/ChatDock.js";
+import { VoiceDock } from "../components/VoiceDock.js";
+import { useVoice } from "../voice/useVoice.js";
 import { AskDialog } from "../components/AskDialog.js";
 import { DeclareDialog } from "../components/DeclareDialog.js";
 import { DeclarationReveal, GameOverBanner } from "../components/DeclarationReveal.js";
@@ -44,6 +46,8 @@ export function GameScreen() {
   const reveal = useGame((s) => s.reveal);
   const gameOver = useGame((s) => s.gameOver);
   const setReveal = useGame((s) => s.setReveal);
+  const voiceParticipants = useGame((s) => s.voiceParticipants);
+  const voice = useVoice();
   const me = useMe();
 
   const [askOpen, setAskOpen] = useState(false);
@@ -213,6 +217,15 @@ export function GameScreen() {
       )}
 
       <ChatDock chat={chat} myPlayerId={game.myPlayerId} />
+
+      {/* §69: optional, non-blocking. Absent entirely when unconfigured. */}
+      <VoiceDock
+        voice={voice}
+        available={room.voice.available}
+        participants={voiceParticipants}
+        players={game.players}
+        myPlayerId={game.myPlayerId}
+      />
 
       {reveal && (
         <DeclarationReveal result={reveal} myTeamId={myTeam} onDismiss={() => setReveal(null)} />

@@ -16,6 +16,7 @@ import type {
   GameEvent,
   JoinResult,
   ServerToClientEvents,
+  VoiceCredentials,
   VoidAck,
 } from "@memory-game/shared";
 
@@ -121,6 +122,11 @@ export const api = {
       payload: { setId, assignments },
     }),
 
+  voiceToken: () => request<"voice:token", Ack<VoiceCredentials>>("voice:token"),
+
+  setVoiceState: (connected: boolean) =>
+    request<"voice:state", VoidAck>("voice:state", { connected }),
+
   sendChat: (message: string) =>
     request<"chat:send", VoidAck>("chat:send", {
       actionId: newActionId(),
@@ -134,6 +140,7 @@ export type ServerListeners = {
   onChat: (m: ChatMessage) => void;
   onHostChanged: (hostId: string) => void;
   onClosed: (reason: "EMPTY" | "EXPIRED") => void;
+  onVoiceParticipants: (playerIds: string[]) => void;
   onConnect: () => void;
   onDisconnect: () => void;
 };
@@ -145,6 +152,7 @@ export function attachListeners(l: ServerListeners): () => void {
   s.on("chat:message", l.onChat);
   s.on("room:host-changed", l.onHostChanged);
   s.on("room:closed", l.onClosed);
+  s.on("voice:participants", l.onVoiceParticipants);
   s.on("connect", l.onConnect);
   s.on("disconnect", l.onDisconnect);
 
@@ -154,6 +162,7 @@ export function attachListeners(l: ServerListeners): () => void {
     s.off("chat:message", l.onChat);
     s.off("room:host-changed", l.onHostChanged);
     s.off("room:closed", l.onClosed);
+    s.off("voice:participants", l.onVoiceParticipants);
     s.off("connect", l.onConnect);
     s.off("disconnect", l.onDisconnect);
   };

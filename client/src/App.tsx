@@ -51,6 +51,7 @@ export default function App() {
       },
       onChat: (m) => useGame.getState().addChat(m),
       onHostChanged: () => void 0,
+      onVoiceParticipants: (ids) => useGame.getState().setVoiceParticipants(ids),
       onClosed: () => {
         clearSession();
         useGame.getState().reset();

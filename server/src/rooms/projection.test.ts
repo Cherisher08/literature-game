@@ -38,6 +38,7 @@ function makeRoom(): { room: GameRoom; game: GameState } {
     createdAt: 0,
     lastActivityAt: 0,
     seq: 3,
+    voiceParticipants: [],
   };
 
   return { room, game };
