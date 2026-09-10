@@ -58,25 +58,35 @@ export default function App() {
         useGame.getState().setError("This room has closed.");
       },
       onConnect: () => {
-        const st = useGame.getState();
-        st.setConnection("CONNECTED");
+        useGame.getState().setConnection("CONNECTED");
 
-        // §35: resume the seat if we have a token for it.
+        // §35: every connect gets a brand-new server socket, so the seat must be
+        // re-bound each time or both broadcast paths silently skip this client.
         const saved = loadSession();
-        if (saved && !st.room) {
-          void api
-            .joinRoom(saved.roomId, saved.name, PROTOCOL_VERSION, saved.sessionToken)
-            .then((res) => {
-              if ("ok" in res && res.ok) {
-                useGame.getState().setName(saved.name);
-                useGame.getState().setIdentity(res.data.playerId);
-                // §65.4: render settled, with entrance animation suppressed.
-                useGame.getState().applyState(res.data.state, { hydrating: true });
-              } else {
-                clearSession();
-              }
-            });
-        }
+        if (!saved) return;
+
+        void api
+          .joinRoom(saved.roomId, saved.name, PROTOCOL_VERSION, saved.sessionToken)
+          .then((res) => {
+            const st = useGame.getState();
+            if ("ok" in res && res.ok) {
+              st.setName(saved.name);
+              st.setIdentity(res.data.playerId);
+              // §65.4: render settled, with entrance animation suppressed.
+              st.applyState(res.data.state, { hydrating: true });
+              return;
+            }
+
+            // Socket up but seat unbound — name the failure, don't look healthy.
+            if ("error" in res && res.error === "TIMEOUT") {
+              st.setConnection("RECONNECTING");
+              return;
+            }
+
+            // §63: the room is gone — a restart or an expiry.
+            clearSession();
+            st.setConnection("SERVER_GONE");
+          });
       },
       onDisconnect: () => useGame.getState().setConnection("RECONNECTING"),
     });
@@ -118,7 +128,10 @@ function ConnectionBanner({ state }: { state: "CONNECTING" | "RECONNECTING" | "S
           className="ml-2 underline"
           onClick={() => {
             clearSession();
-            useGame.getState().reset();
+            const st = useGame.getState();
+            st.reset();
+            // `reset` leaves connection alone, so the banner would outlive the room.
+            st.setConnection(getSocket().connected ? "CONNECTED" : "CONNECTING");
           }}
         >
           Create or join a new room

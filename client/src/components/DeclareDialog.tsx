@@ -29,6 +29,14 @@ export function DeclareDialog({ game, onClose, onDeclare }: DeclareDialogProps) 
   const chosen = setId ? CARD_SETS.find((s) => s.setId === setId) : null;
   const complete = chosen ? chosen.cardIds.every((id) => assign[id]) : false;
 
+  // §51.1: the set is claimed for your own team, so an opponent is never a valid
+  // answer — the engine allows one, which made it a trap rather than a choice (§21).
+  const myTeamId =
+    game.declarationWindow?.teamId ??
+    game.players.find((p) => p.id === game.myPlayerId)?.teamId ??
+    null;
+  const targets = myTeamId ? game.players.filter((p) => p.teamId === myTeamId) : game.players;
+
   // Step 1 — pick the set
   if (!chosen) {
     return (
@@ -75,7 +83,8 @@ export function DeclareDialog({ game, onClose, onDeclare }: DeclareDialogProps) 
                     <Avatar
                       seatPosition={player.seatPosition}
                       teamId={player.teamId}
-                      isAlly={false}
+                      // Every row is a teammate; `false` painted them as opponents.
+                      isAlly
                       size={30}
                     />
                     <span className="text-sm font-medium">{player.name}</span>
@@ -115,14 +124,19 @@ export function DeclareDialog({ game, onClose, onDeclare }: DeclareDialogProps) 
   // Step 2 — assign each card to a player
   return (
     <Modal title={`Declare — ${chosen.name}`} onClose={onClose}>
-      <Step n={2} label="Who holds each card?" hint="Pick the player you think holds each card" done={complete} />
+      <Step
+        n={2}
+        label="Who on your team holds each card?"
+        hint="A declaration only succeeds if all six cards are with your own team"
+        done={complete}
+      />
 
       <div className="mb-4 space-y-3">
         {chosen.cardIds.map((cardId) => (
           <div key={cardId} className="flex items-center gap-3">
             <PlayingCard card={getCard(cardId)!} size="sm" />
             <div className="flex flex-1 flex-wrap gap-1.5">
-              {game.players.map((p) => {
+              {targets.map((p) => {
                 const active = assign[cardId] === p.id;
                 return (
                   <button
