@@ -1,0 +1,80 @@
+# Render blueprint. Spec §69.6.
+#
+# Two services:
+#   literature-api  — the Socket.IO game server (Node web service)
+#   literature-web  — the built React client (static site, free, never sleeps)
+#
+# Deploy with: Render dashboard -> New -> Blueprint -> point at this repo.
+#
+# Free-tier note (§69.6): the API sleeps after 15 minutes with no inbound
+# traffic and takes ~1 minute to wake. Since Feb 2026 an incoming WebSocket
+# message also resets that timer, and Socket.IO's heartbeat produces one about
+# every 25s, so an active game keeps it awake. An idle room does not: expect a
+# cold start for the first player after a quiet spell.
+
+services:
+  # ---------------------------------------------------------------------------
+  # Game server
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: literature-api
+    runtime: node
+    plan: free
+    region: oregon
+    # Root install: this is an npm workspace, so the server, client and shared
+    # packages are all resolved from the repo root.
+    buildCommand: npm ci
+    startCommand: npm start --workspace @memory-game/server
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Render prunes devDependencies when NODE_ENV=production. Everything the
+      # server needs at runtime is a real dependency, but the client build in
+      # the static site below needs Vite, so keep installs complete.
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
+      - key: NODE_ENV
+        value: production
+      # Set to the static site's URL once it exists, e.g.
+      #   https://literature-web.onrender.com
+      # Leave as * only while testing — it allows any origin to connect.
+      - key: CORS_ORIGINS
+        sync: false
+      # §69: voice is optional. Leave these unset and the game runs without it,
+      # showing a "Voice off" chip instead of the join button.
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # Client
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: literature-web
+    runtime: static
+    buildCommand: npm ci && npm run build --workspace @memory-game/client
+    staticPublishPath: client/dist
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
+      # Baked in at build time. Point it at the API service, e.g.
+      #   https://literature-api.onrender.com
+      # Without it the client assumes same-origin, which is only correct in dev
+      # where Vite proxies /socket.io.
+      - key: VITE_SERVER_URL
+        sync: false
+    routes:
+      # Single-page app: every path serves index.html.
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable

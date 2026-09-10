@@ -8,14 +8,11 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ConnectionState,
-  RoomEvent,
+import type {
+  RemoteParticipant,
+  RemoteTrack,
+  RemoteTrackPublication,
   Room,
-  Track,
-  type RemoteParticipant,
-  type RemoteTrack,
-  type RemoteTrackPublication,
 } from "livekit-client";
 import { api } from "../socket/client.js";
 
@@ -94,6 +91,10 @@ export function useVoice(): VoiceApi {
       );
       return;
     }
+
+    // Loaded on demand: the SDK is a large chunk and most sessions never join
+    // voice, so it must not sit in the critical path of starting a game.
+    const { ConnectionState, Room, RoomEvent, Track } = await import("livekit-client");
 
     const room = new Room({
       // §69.3: Opus DTX — silence costs almost nothing, which matters on the

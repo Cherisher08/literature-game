@@ -3074,3 +3074,42 @@ Moves are delayed 0.9–2.2s so play is followable rather than instantaneous.
 ## 73.5 Practical Effect
 
 Filling a table previously needed 4–8 browser tabs. One tab plus three bots is now a complete game, which makes manual testing of every later feature dramatically cheaper.
+
+---
+
+# 74. Deployment
+
+Build and deploy steps live in `DEPLOY.md`; `render.yaml` defines both services. This section records the decisions behind them.
+
+## 74.1 Two Services, Not One
+
+| Service | Type | Why |
+|---|---|---|
+| `literature-api` | Node web service | Holds a process and real WebSocket connections |
+| `literature-web` | Static site | Free, global, and **never sleeps** |
+
+Splitting them matters on a free tier. §69.6 noted that a sleeping service takes ~1 minute to wake; if the client were served from the same service, that cold start would be the first thing a player meets — a blank page. As a static site the page always loads instantly and only the socket waits, which the connection banner (§33) already handles honestly.
+
+## 74.2 The Client Learns the Server URL at Build Time
+
+`VITE_SERVER_URL` is compiled into the bundle. Unset, the client assumes same-origin — correct in development, where Vite proxies `/socket.io`, and wrong in production, where the two live on different hosts.
+
+The consequence worth remembering: **changing it requires a rebuild, not a restart.**
+
+## 74.3 CORS Is the Likeliest Failure
+
+Development never exercises CORS, because the Vite proxy makes everything same-origin. Production is the first time it matters, and when it is wrong the server looks perfectly healthy while every browser silently refuses to connect.
+
+`CORS_ORIGINS` must match the client origin exactly — no trailing slash. Verified behaviour: an allowed origin receives `Access-Control-Allow-Origin`; any other origin receives none, so the browser blocks it. Leaving it as `*` works and lets any site connect to your rooms.
+
+## 74.4 Runtime Dependencies
+
+The server runs TypeScript directly through `tsx`, so **`tsx` is a runtime dependency, not a dev one**. It was originally in `devDependencies`, which works locally and fails on any host that prunes dev packages — a failure that appears only at deploy time.
+
+The `shared` workspace is consumed as TypeScript source rather than a build artefact, which is why the server needs `tsx` and the client needs Vite to resolve it. That keeps one source of truth for the types at the cost of a runtime transpiler.
+
+## 74.5 Voice Is Loaded on Demand
+
+The LiveKit SDK is ~564 kB — larger than the rest of the application. It is imported dynamically inside `join()`, so it downloads only when a player actually joins voice.
+
+Before: one 989 kB bundle. After: 427 kB to start playing, with voice as a separate chunk. Most sessions never join voice, and none should wait on it to see their cards.
