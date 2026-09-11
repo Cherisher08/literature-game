@@ -30,6 +30,8 @@ export interface RoomPlayer {
   /** §73: bot seats have no socket and are driven server-side. */
   bot?: { difficulty: BotDifficulty };
   disconnectedAt?: number;
+  /** Set when `bot` was assigned by the disconnect-timeout takeover, not by a lobby "Add a bot" — distinguishes a stand-in from a real bot seat so reconnecting hands control back. */
+  botControlled?: boolean;
 }
 
 export interface GameRoom {

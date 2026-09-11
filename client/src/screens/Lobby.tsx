@@ -7,7 +7,19 @@
  */
 
 import { useState } from "react";
-import { Bot, Check, Copy, Crown, Link2, LogOut, LogIn, Play, Repeat2, Users, X } from "lucide-react";
+import {
+  Bot,
+  Check,
+  Copy,
+  Crown,
+  Link2,
+  LogOut,
+  LogIn,
+  Play,
+  Repeat2,
+  Users,
+  X,
+} from "lucide-react";
 import { BOT_DIFFICULTIES, type BotDifficulty, type PublicPlayer, type TeamId } from "@memory-game/shared";
 import { api } from "../socket/client.js";
 import { clearSession, useGame, useIsHost, useMe } from "../store/useGame.js";

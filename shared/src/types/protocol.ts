@@ -41,6 +41,8 @@ export interface PublicPlayer {
   isBot: boolean;
   /** Present only for bots. */
   difficulty?: BotDifficulty;
+  /** True when `isBot` is a stand-in for a disconnected human, not a seat added as a bot. */
+  botStandIn?: boolean;
 }
 
 export type RoomStatus = "LOBBY" | "PLAYING" | "FINISHED";

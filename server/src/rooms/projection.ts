@@ -32,6 +32,7 @@ function lobbyPlayer(room: GameRoom, playerId: string): PublicPlayer {
     spectating: false,
     isBot: Boolean(p.bot),
     ...(p.bot ? { difficulty: p.bot.difficulty } : {}),
+    ...(p.botControlled ? { botStandIn: true } : {}),
   };
 }
 
@@ -52,6 +53,7 @@ function publicPlayers(room: GameRoom, game: GameState | undefined): PublicPlaye
       spectating: p.hand.length === 0,
       isBot: Boolean(roomPlayer?.bot),
       ...(roomPlayer?.bot ? { difficulty: roomPlayer.bot.difficulty } : {}),
+      ...(roomPlayer?.botControlled ? { botStandIn: true } : {}),
     };
   });
 }

@@ -174,11 +174,15 @@ export function GameOverBanner({
           />
         </div>
 
+        <p className="mb-4 text-xs text-[var(--text-muted)]">
+          Everyone's headed back to the lobby together…
+        </p>
+
         <button
           onClick={onDismiss}
-          className="w-full rounded-xl bg-[var(--team-us)] py-3 font-bold text-[#07281a]"
+          className="w-full rounded-xl border border-[var(--border)] py-3 text-sm font-semibold text-[var(--text-muted)]"
         >
-          Back to menu
+          Leave now
         </button>
       </motion.div>
     </div>

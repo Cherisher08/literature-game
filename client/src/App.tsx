@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import { PROTOCOL_VERSION } from "@memory-game/shared";
 import { HomeScreen, NameScreen } from "./screens/NameAndHome.js";
 import { LobbyScreen } from "./screens/Lobby.js";
@@ -127,9 +128,11 @@ export default function App() {
               return;
             }
 
-            // §63: the room is gone — a restart or an expiry.
+            // §63: the room is gone — a restart or an expiry. Nothing to wait
+            // on any more, so stop holding the loading screen up.
             clearSession();
             st.setConnection("SERVER_GONE");
+            st.setScreen("NAME");
           });
       },
       onDisconnect: () => useGame.getState().setConnection("RECONNECTING"),
@@ -152,6 +155,7 @@ export default function App() {
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
+          {screen === "LOADING" && <LoadingScreen />}
           {screen === "NAME" && <NameScreen />}
           {screen === "HOME" && <HomeScreen />}
           {screen === "LOBBY" && <LobbyScreen />}
@@ -183,6 +187,17 @@ export default function App() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+// Shown while a stored session (§35) is being resumed — a reload or a fresh
+// tab on a room link would otherwise flash the name-entry form first.
+function LoadingScreen() {
+  return (
+    <div className="flex min-h-full flex-col items-center justify-center gap-3 p-6 text-[var(--text-muted)]">
+      <Loader2 size={28} className="animate-spin text-[var(--accent)]" />
+      <p className="text-sm">Reconnecting…</p>
     </div>
   );
 }

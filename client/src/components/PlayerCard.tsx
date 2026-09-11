@@ -5,7 +5,7 @@
  * information players actually track and a bare numeral is easy to skim past.
  */
 
-import { Crown, WifiOff } from "lucide-react";
+import { Bot, Crown, WifiOff } from "lucide-react";
 import type { PublicPlayer, TeamId } from "@memory-game/shared";
 import { Avatar } from "./Avatar.js";
 
@@ -76,6 +76,15 @@ export function PlayerCard({
           </span>
           {!player.connected && (
             <WifiOff size={12} className="shrink-0 text-[var(--team-them)]" aria-label="Offline" />
+          )}
+          {player.botStandIn && (
+            <span
+              className="flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide uppercase"
+              style={{ background: "rgba(251,191,36,.15)", color: "var(--accent)" }}
+              title="Playing on their behalf while they're disconnected"
+            >
+              <Bot size={10} /> Bot
+            </span>
           )}
           {active && (
             <span

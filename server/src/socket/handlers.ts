@@ -6,6 +6,7 @@
  * never learns a message was retried (§68.6).
  */
 
+import { randomInt } from "node:crypto";
 import type { Server, Socket } from "socket.io";
 import {
   ERROR_MESSAGE,
@@ -67,6 +68,12 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
     }
   }
 
+  // Once a move ends the game, the whole room returns to the lobby together
+  // rather than each player being left to find their own way out.
+  function maybeScheduleReturnToLobby(room: GameRoom): void {
+    if (room.status === "FINISHED") rooms.scheduleReturnToLobby(room);
+  }
+
   function broadcastEvents(room: GameRoom, events: GameEvent[]): void {
     for (const event of events) {
       const seq = rooms.nextSeq(room);
@@ -75,6 +82,7 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
     broadcastState(room);
     // §73: a bot may now be on turn. Safe to call after every mutation.
     bots.schedule(room);
+    maybeScheduleReturnToLobby(room);
   }
 
   // §73: bots publish through exactly the same path a human move does.
@@ -85,7 +93,20 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
         io.to(room.id).emit("game:event", event, seq);
       }
       broadcastState(room);
+      maybeScheduleReturnToLobby(room);
     },
+  });
+
+  // A seat that just flipped to bot-controlled needs the same "state may have
+  // changed, a bot may now be on turn" treatment as any other mutation.
+  rooms.setBotTakeoverHook((room) => {
+    broadcastState(room);
+    bots.schedule(room);
+  });
+
+  // The delayed transition itself: the room is LOBBY again, so tell everyone.
+  rooms.setReturnToLobbyHook((room) => {
+    broadcastState(room);
   });
 
   function currentRoom(socket: GameSocket): GameRoom | undefined {
@@ -296,7 +317,10 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
         hand: hands[i]!,
       }));
 
-      room.game = createGameState(players, players[0]!.id);
+      // Who plays first is random, not fixed to a seat — otherwise the same
+      // player would always open every game.
+      const firstPlayer = players[randomInt(players.length)]!;
+      room.game = createGameState(players, firstPlayer.id);
       room.status = "PLAYING";
       rooms.touch(room);
 

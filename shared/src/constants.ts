@@ -55,6 +55,12 @@ export const TEAM_TURN_MS = 60_000;
 /** §54: room lifecycle. */
 export const EMPTY_ROOM_TIMEOUT_MS = 120_000;
 export const PLAYER_RECONNECT_MS = 120_000;
+
+/** A disconnected player still on turn this long is played by a bot until they return. */
+export const BOT_TAKEOVER_MS = 30_000;
+
+/** Time the game-over result stays up before the whole room lands back in the lobby together. */
+export const POST_GAME_LOBBY_DELAY_MS = 8_000;
 export const ROOM_IDLE_TTL_MS = 2 * 60 * 60 * 1000;
 export const ROOM_MAX_LIFETIME_MS = 6 * 60 * 60 * 1000;
 

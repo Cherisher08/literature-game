@@ -16,7 +16,7 @@ import {
   type TeamId,
 } from "@memory-game/shared";
 
-export type Screen = "NAME" | "HOME" | "LOBBY" | "GAME";
+export type Screen = "LOADING" | "NAME" | "HOME" | "LOBBY" | "GAME";
 export type ConnectionState = "CONNECTING" | "CONNECTED" | "RECONNECTING" | "SERVER_GONE";
 
 const SESSION_KEY = "literature.session";
@@ -118,7 +118,9 @@ interface GameStore {
 }
 
 export const useGame = create<GameStore>((set, get) => ({
-  screen: "NAME",
+  // A stored session means a reconnect attempt is coming (§35) — hold on a
+  // loading screen rather than flashing the name form before it resolves.
+  screen: loadSession() ? "LOADING" : "NAME",
   connection: "CONNECTING",
   name: "",
   playerId: null,
@@ -143,6 +145,9 @@ export const useGame = create<GameStore>((set, get) => ({
       lastSeq: room.seq,
       hydrating: opts?.hydrating ?? false,
       screen: room.status === "LOBBY" ? "LOBBY" : "GAME",
+      // Back in the lobby means the last game is done — clear its leftovers so
+      // they can't flash back up if this player's next game ends the same way.
+      ...(room.status === "LOBBY" ? { gameOver: null, reveal: null } : {}),
     }),
 
   noteEvent: (_event, seq) => {

@@ -7,8 +7,10 @@
 
 import { randomInt, randomUUID } from "node:crypto";
 import {
+  BOT_TAKEOVER_MS,
   EMPTY_ROOM_TIMEOUT_MS,
   MAX_CHAT_HISTORY,
+  POST_GAME_LOBBY_DELAY_MS,
   ROOM_CODE_ALPHABET,
   ROOM_CODE_LENGTH,
   ROOM_IDLE_TTL_MS,
@@ -26,6 +28,10 @@ export type RoomCloseReason = "EMPTY" | "EXPIRED";
 
 export interface RoomManagerHooks {
   onRoomClosed?: (roomId: string, reason: RoomCloseReason) => void;
+  /** Fires once a still-disconnected seat has been handed to a bot (§73). */
+  onBotTakeover?: (room: GameRoom) => void;
+  /** Fires once a finished game has been cleared and the room is back in the lobby. */
+  onReturnToLobby?: (room: GameRoom) => void;
 }
 
 export class RoomManager {
@@ -242,6 +248,14 @@ export class RoomManager {
     const player = room.players.find((p) => p.sessionToken === sessionToken);
     if (!player) return { error: "INVALID_SESSION" };
 
+    // Hand control back before marking connected — a bot mid-delay that still
+    // fires after this checks `bot` on the live seat and finds it gone (§73).
+    if (player.botControlled) {
+      delete player.bot;
+      delete player.botControlled;
+    }
+    this.cancelTimer(room.id, `bot-takeover:${player.id}`);
+
     player.connected = true;
     player.socketId = socketId;
     delete player.disconnectedAt;
@@ -249,6 +263,26 @@ export class RoomManager {
     this.touch(room);
     this.cancelTimer(room.id, "empty");
     return { room, player };
+  }
+
+  /**
+   * A player still disconnected after `BOT_TAKEOVER_MS` is played by a bot so
+   * the game does not stall on them. Only meaningful mid-game — the lobby has
+   * no turns to take over, and `removePlayer`/`markDisconnected` already cover
+   * the seat otherwise. Returns the room if the takeover applied, undefined if
+   * it no longer makes sense (reconnected, left, or the game ended first).
+   */
+  takeOverAsBot(roomId: string, playerId: string): GameRoom | undefined {
+    const room = this.rooms.get(roomId);
+    if (!room || room.status !== "PLAYING") return undefined;
+
+    const player = room.players.find((p) => p.id === playerId);
+    if (!player || player.connected || player.bot) return undefined;
+
+    player.bot = { difficulty: "MEDIUM" };
+    player.botControlled = true;
+    this.touch(room);
+    return room;
   }
 
   /** §34: mark offline but keep the seat. Does not remove the player. */
@@ -266,7 +300,24 @@ export class RoomManager {
 
     this.reassignHostIfNeeded(room);
     this.scheduleEmptyRoomCloseIfNeeded(room);
+    this.scheduleBotTakeoverIfNeeded(room, playerId);
     return room;
+  }
+
+  /** Lets the socket layer hear about a takeover so it can broadcast and let the bot runner pick up the turn — `RoomManager` has no socket/bot-runner reference of its own. */
+  setBotTakeoverHook(fn: (room: GameRoom) => void): void {
+    this.hooks.onBotTakeover = fn;
+  }
+
+  /** §73 extension: mid-game, a seat still disconnected after `BOT_TAKEOVER_MS` is handed to a bot so the game does not stall on an absent player. */
+  private scheduleBotTakeoverIfNeeded(room: GameRoom, playerId: string): void {
+    if (room.status !== "PLAYING") return;
+    this.setTimer(room.id, `bot-takeover:${playerId}`, BOT_TAKEOVER_MS, () => {
+      const current = this.rooms.get(room.id);
+      if (!current) return;
+      const taken = this.takeOverAsBot(current.id, playerId);
+      if (taken) this.hooks.onBotTakeover?.(taken);
+    });
   }
 
   /** Explicit leave: the seat is given up. */
@@ -310,7 +361,6 @@ export class RoomManager {
   hostOf(room: GameRoom): string {
     return room.hostId;
   }
-
 
   // -------------------------------------------------------------------------
   // Lobby team selection (§71)
@@ -442,6 +492,28 @@ export class RoomManager {
       clearTimeout(t);
       rt!.timers.delete(key);
     }
+  }
+
+  /** Lets the socket layer broadcast once the room lands back in the lobby — `RoomManager` has no socket reference of its own. */
+  setReturnToLobbyHook(fn: (room: GameRoom) => void): void {
+    this.hooks.onReturnToLobby = fn;
+  }
+
+  /**
+   * A finished game holds its result on screen for everyone, then the whole
+   * room — not just whoever clicks something first — lands back in the lobby
+   * together, teams and seats intact, ready for a rematch (§72.3).
+   */
+  scheduleReturnToLobby(room: GameRoom): void {
+    if (room.status !== "FINISHED") return;
+    this.setTimer(room.id, "return-to-lobby", POST_GAME_LOBBY_DELAY_MS, () => {
+      const current = this.rooms.get(room.id);
+      if (!current || current.status !== "FINISHED") return;
+      current.game = undefined;
+      current.status = "LOBBY";
+      this.touch(current);
+      this.hooks.onReturnToLobby?.(current);
+    });
   }
 
   /**
