@@ -66,8 +66,8 @@ export function ChatDock({ chat, myPlayerId }: { chat: ChatMessage[]; myPlayerId
 
   return (
     <>
-      {/* Toasts — above the button, never interactive */}
-      <div className="pointer-events-none fixed right-3 bottom-[7.5rem] z-30 flex flex-col items-end gap-2">
+      {/* Toasts — z-40 so they always sit above the voice dock (z-30) instead of being hidden under it when both float in the same corner. */}
+      <div className="pointer-events-none fixed right-3 bottom-[7.5rem] z-40 flex flex-col items-end gap-2">
         <AnimatePresence initial={false}>
           {toasts.map((m) => (
             <motion.div

@@ -14,7 +14,7 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { Check, X } from "lucide-react";
-import { cardAccessibleName, type LastAsk, type PublicPlayer } from "@memory-game/shared";
+import { cardAccessibleName, SUIT_COLOR, type LastAsk, type PublicPlayer } from "@memory-game/shared";
 import { Avatar } from "./Avatar.js";
 import { PlayingCard } from "./PlayingCard.js";
 
@@ -115,6 +115,13 @@ export function LastAskPanel({ lastAsk, players, myTeamId, hydrating }: LastAskP
               <Who player={asker} myTeamId={myTeamId} />
               <span className="shrink-0 text-[11px] text-[var(--text-muted)]">asked</span>
               <Who player={target} myTeamId={myTeamId} />
+              <span className="shrink-0 text-[11px] text-[var(--text-muted)]">for</span>
+              <span
+                className="shrink-0 text-lg font-bold"
+                style={{ color: SUIT_COLOR[lastAsk.card.suit] === "red" ? "#ef4444" : "var(--text)" }}
+              >
+                {lastAsk.card.label}
+              </span>
             </div>
 
             {/* §65.2: naming where the turn went removes the commonest confusion. */}

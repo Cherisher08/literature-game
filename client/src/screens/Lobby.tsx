@@ -7,13 +7,39 @@
  */
 
 import { useState } from "react";
-import { Bot, Check, Copy, Crown, LogOut, LogIn, Play, Repeat2, Users, X } from "lucide-react";
+import { Bot, Check, Copy, Crown, Link2, LogOut, LogIn, Play, Repeat2, Users, X } from "lucide-react";
 import { BOT_DIFFICULTIES, type BotDifficulty, type PublicPlayer, type TeamId } from "@memory-game/shared";
 import { api } from "../socket/client.js";
 import { clearSession, useGame, useIsHost, useMe } from "../store/useGame.js";
 import { describe } from "./NameAndHome.js";
 
 const TEAM_LABEL: Record<TeamId, string> = { A: "Team A", B: "Team B" };
+
+/**
+ * `navigator.clipboard` only exists in a secure context (HTTPS or localhost) —
+ * over plain HTTP on a LAN IP it's `undefined` and writeText silently does
+ * nothing. Fall back to the old hidden-textarea + execCommand trick, which
+ * still works over HTTP in every major browser.
+ */
+function copyText(text: string): void {
+  if (navigator.clipboard) {
+    void navigator.clipboard.writeText(text);
+    return;
+  }
+  const el = document.createElement("textarea");
+  el.value = text;
+  el.style.position = "fixed";
+  el.style.opacity = "0";
+  document.body.appendChild(el);
+  el.focus();
+  el.select();
+  try {
+    document.execCommand("copy");
+  } catch {
+    /* nothing more we can do — the button's own visible text is the fallback */
+  }
+  el.remove();
+}
 
 export function LobbyScreen() {
   const room = useGame((s) => s.room)!;
@@ -24,6 +50,7 @@ export function LobbyScreen() {
   const me = useMe();
 
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [botLevel, setBotLevel] = useState<BotDifficulty>("MEDIUM");
 
@@ -88,7 +115,7 @@ export function LobbyScreen() {
           </span>
           <button
             onClick={() => {
-              void navigator.clipboard?.writeText(room.roomId);
+              copyText(room.roomId);
               setCopied(true);
               setTimeout(() => setCopied(false), 1500);
             }}
@@ -102,6 +129,30 @@ export function LobbyScreen() {
           <Users size={15} />
           {room.players.length} of {seats} players
         </p>
+
+        <button
+          onClick={() => {
+            const link = `${window.location.origin}/${room.roomId}`;
+            if (navigator.share) {
+              void navigator.share({ title: "Join my Literature game", url: link }).catch(() => {});
+              return;
+            }
+            copyText(link);
+            setLinkCopied(true);
+            setTimeout(() => setLinkCopied(false), 1500);
+          }}
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] py-2.5 text-sm font-semibold hover:bg-white/5"
+        >
+          {linkCopied ? (
+            <>
+              <Check size={15} className="text-[var(--team-us)]" /> Link copied
+            </>
+          ) : (
+            <>
+              <Link2 size={15} /> Share invite link
+            </>
+          )}
+        </button>
       </div>
 
       {/* Team selection (§71) — everyone picks their own, not just the host */}

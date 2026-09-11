@@ -18,13 +18,18 @@ import {
   type PlayerCount,
 } from "@memory-game/shared";
 import { api } from "../socket/client.js";
-import { saveSession, useGame } from "../store/useGame.js";
+import { INITIAL_ROOM_CODE, saveSession, useGame } from "../store/useGame.js";
 
 export function NameScreen() {
   const name = useGame((s) => s.name);
   const setName = useGame((s) => s.setName);
   const setScreen = useGame((s) => s.setScreen);
+  const setIdentity = useGame((s) => s.setIdentity);
+  const applyState = useGame((s) => s.applyState);
+  const setError = useGame((s) => s.setError);
+  const error = useGame((s) => s.error);
   const [value, setValue] = useState(name);
+  const [busy, setBusy] = useState(false);
 
   const trimmed = value.trim();
 
@@ -32,15 +37,36 @@ export function NameScreen() {
     <Shell>
       <h1 className="mb-1 text-2xl font-bold">Literature</h1>
       <p className="mb-8 text-sm text-[var(--text-muted)]">
-        A team card game of memory and deduction.
+        {INITIAL_ROOM_CODE
+          ? `Joining room ${INITIAL_ROOM_CODE} — enter your name to jump in.`
+          : "A team card game of memory and deduction."}
       </p>
 
       <form
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          if (!trimmed) return;
+          if (!trimmed || busy) return;
           setName(trimmed);
-          setScreen("HOME");
+
+          // A room link (e.g. /TN47RQ) should drop you straight into the room, not
+          // hand you back to the create/join form once you've already typed the code.
+          if (!INITIAL_ROOM_CODE) {
+            setScreen("HOME");
+            return;
+          }
+
+          setBusy(true);
+          setError(null);
+          const res = await api.joinRoom(INITIAL_ROOM_CODE, trimmed, PROTOCOL_VERSION);
+          setBusy(false);
+          if (!("ok" in res) || !res.ok) {
+            setError(describe(res));
+            setScreen("HOME");
+            return;
+          }
+          setIdentity(res.data.playerId);
+          saveSession({ roomId: res.data.roomId, sessionToken: res.data.sessionToken, name: trimmed });
+          applyState(res.data.state);
         }}
         className="w-full"
       >
@@ -56,8 +82,16 @@ export function NameScreen() {
           className="mb-4 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-base outline-none focus:border-[var(--accent)]"
           placeholder="Your name"
         />
-        <PrimaryButton disabled={!trimmed}>Continue</PrimaryButton>
+        <PrimaryButton disabled={!trimmed || busy}>
+          {busy ? "Joining…" : "Continue"}
+        </PrimaryButton>
       </form>
+
+      {error && (
+        <p role="alert" className="mt-4 text-center text-sm text-[var(--team-them)]">
+          {error}
+        </p>
+      )}
 
       <p className="mt-6 text-center text-xs text-[var(--text-muted)]">
         Your name is used only for this room and is deleted when the room closes.
@@ -73,7 +107,9 @@ export function HomeScreen() {
   const setError = useGame((s) => s.setError);
   const error = useGame((s) => s.error);
 
-  const [code, setCode] = useState("");
+  // A room link opened cold and not resolved by an auto-reconnect still names the room
+  // the visitor meant to reach — pre-fill the join code instead of making them retype it.
+  const [code, setCode] = useState(INITIAL_ROOM_CODE ?? "");
   const [busy, setBusy] = useState(false);
   const [playerCount, setPlayerCount] = useState<PlayerCount>(DEFAULT_PLAYER_COUNT);
 

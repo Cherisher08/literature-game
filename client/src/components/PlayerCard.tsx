@@ -40,19 +40,29 @@ export function PlayerCard({
   return (
     <Tag
       {...(onClick ? { onClick, type: "button" as const, "aria-pressed": selected } : {})}
-      className="flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition-colors"
+      className="relative flex w-full items-center gap-3 overflow-hidden rounded-2xl border p-3 text-left transition-all"
       style={{
         borderColor: selected ? "var(--accent)" : active ? tone : "var(--border)",
-        background: active ? "rgba(255,255,255,.04)" : "var(--surface)",
+        background: active
+          ? `linear-gradient(135deg, color-mix(in srgb, ${tone} 14%, var(--surface)), var(--surface))`
+          : "var(--surface)",
+        boxShadow: active ? `0 0 0 1px ${tone}, 0 6px 18px -6px ${tone}` : "none",
         opacity: player.spectating ? 0.6 : 1,
         transitionDuration: "var(--dur-fast)",
       }}
     >
+      {/* Team-colour spine — a quiet, always-on cue that doesn't depend on the turn ring. */}
+      <span
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ background: tone, opacity: player.teamId ? 0.9 : 0 }}
+        aria-hidden="true"
+      />
+
       <Avatar
         seatPosition={player.seatPosition}
         teamId={player.teamId}
         isAlly={ally}
-        size={40}
+        size={42}
         ring={active ? "turn" : "none"}
         dimmed={player.spectating || !player.connected}
       />
@@ -67,6 +77,14 @@ export function PlayerCard({
           {!player.connected && (
             <WifiOff size={12} className="shrink-0 text-[var(--team-them)]" aria-label="Offline" />
           )}
+          {active && (
+            <span
+              className="ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide uppercase"
+              style={{ background: `color-mix(in srgb, ${tone} 20%, transparent)`, color: tone }}
+            >
+              Turn
+            </span>
+          )}
         </div>
 
         {player.spectating ? (
@@ -74,18 +92,18 @@ export function PlayerCard({
             Spectating
           </span>
         ) : (
-          <div className="mt-1 flex items-center gap-2">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/8">
+          <div className="mt-1.5 flex items-center gap-2">
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/8">
               <div
                 className="h-full rounded-full transition-[width]"
                 style={{
                   width: `${pct}%`,
-                  background: tone,
+                  background: `linear-gradient(90deg, color-mix(in srgb, ${tone} 70%, white), ${tone})`,
                   transitionDuration: "var(--dur-base)",
                 }}
               />
             </div>
-            <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-[var(--text-muted)]">
+            <span className="w-9 shrink-0 text-right text-[11px] font-semibold tabular-nums text-[var(--text-muted)]">
               {player.cardCount}
             </span>
           </div>

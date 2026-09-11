@@ -1,30 +1,76 @@
-/**
- * App shell. Spec §33, §63, §68.5.
- *
- * The connection banner distinguishes reconnecting from server-gone: a player
- * who cannot tell "slow" from "gone" waits forever for a room that no longer
- * exists (§63).
- */
+// App shell (§33, §63, §68.5) — the banner distinguishes reconnecting from server-gone so a stalled connection doesn't read as "waiting forever" (§63).
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { PROTOCOL_VERSION } from "@memory-game/shared";
 import { HomeScreen, NameScreen } from "./screens/NameAndHome.js";
 import { LobbyScreen } from "./screens/Lobby.js";
 import { GameScreen } from "./screens/Game.js";
+import { ChatDock } from "./components/ChatDock.js";
+import { VoiceDock } from "./components/VoiceDock.js";
+import { useVoice } from "./voice/useVoice.js";
 import { api, attachListeners, getSocket } from "./socket/client.js";
-import { clearSession, loadSession, useGame } from "./store/useGame.js";
+import { clearSession, loadSession, useGame, useMe } from "./store/useGame.js";
+
+// Syncs the URL (/home, /lobby, /:roomId) to `screen` so back has real history entries instead of none, which is what closed the tab.
+function useRouteSync(onBackPastRoom: () => void) {
+  const screen = useGame((s) => s.screen);
+  const roomId = useGame((s) => s.room?.roomId);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const weNavigated = useRef(false);
+  const mounted = useRef(false);
+
+  const target =
+    screen === "GAME" && roomId ? `/${roomId}` : screen === "LOBBY" && roomId ? "/lobby" : "/home";
+
+  // Forward: app state moved on (joined, started, left) — push the URL to match.
+  useEffect(() => {
+    if (location.pathname === target) return;
+    weNavigated.current = true;
+    navigate(target, { replace: !mounted.current });
+    mounted.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+
+  // Backward: URL changed under us (back/forward). Stepping back to /home while still
+  // seated in a room isn't allowed to happen silently — a stray back tap must not drop
+  // you out of a live game — so the URL snaps back to where state is and a confirmation
+  // is asked before anything actually leaves. Any other mismatch just snaps back too.
+  useEffect(() => {
+    mounted.current = true;
+    if (weNavigated.current) {
+      weNavigated.current = false;
+      return;
+    }
+    if (location.pathname === target) return;
+
+    const leavingRoom = location.pathname === "/home" && target !== "/home";
+    weNavigated.current = true;
+    navigate(target, { replace: true });
+    if (leavingRoom) onBackPastRoom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+}
 
 export default function App() {
   const screen = useGame((s) => s.screen);
   const connection = useGame((s) => s.connection);
+  const room = useGame((s) => s.room);
+  const chat = useGame((s) => s.chat);
+  const voiceParticipants = useGame((s) => s.voiceParticipants);
+  const me = useMe();
+  // Lifted above the screens so a voice call survives the lobby-to-game transition instead of dropping and reconnecting.
+  const voice = useVoice();
+  const [confirmLeave, setConfirmLeave] = useState(false);
+
+  useRouteSync(() => setConfirmLeave(true));
 
   useEffect(() => {
     const store = useGame.getState();
     const sock = getSocket();
 
-    // socket.io connects on creation, so the `connect` event may already have
-    // fired before these listeners attach (and StrictMode re-runs this effect).
-    // Seed from the live flag instead of waiting for an event that is gone.
+    // `connect` may have already fired before these listeners attach (StrictMode re-runs this effect) — seed from the live flag instead of waiting for an event that's gone.
     if (sock.connected) store.setConnection("CONNECTED");
 
     const detach = attachListeners({
@@ -39,8 +85,7 @@ export default function App() {
             scores: _e.teamScores,
           });
         }
-        // §68.6: a gap means we missed a broadcast — replace state wholesale
-        // rather than applying an update to state we know is stale.
+        // §68.6: a gap means we missed a broadcast — replace state wholesale rather than applying an update to state we know is stale.
         if (useGame.getState().noteEvent(_e, seq)) {
           void api.resync().then((res) => {
             if ("ok" in res && res.ok) {
@@ -60,8 +105,7 @@ export default function App() {
       onConnect: () => {
         useGame.getState().setConnection("CONNECTED");
 
-        // §35: every connect gets a brand-new server socket, so the seat must be
-        // re-bound each time or both broadcast paths silently skip this client.
+        // §35: every connect gets a brand-new server socket, so the seat must be re-bound each time or both broadcast paths silently skip this client.
         const saved = loadSession();
         if (!saved) return;
 
@@ -101,8 +145,7 @@ export default function App() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {connection !== "CONNECTED" && <ConnectionBanner state={connection} />}
-      {/* Exactly one region claims flex-1. Rendering an empty sibling alongside
-          the game left it holding half the viewport as dead space. */}
+      {/* Exactly one region claims flex-1 — an empty sibling alongside the game left it holding half the viewport as dead space. */}
       {screen === "GAME" ? (
         <div className="min-h-0 flex-1 overflow-hidden">
           <GameScreen />
@@ -114,6 +157,66 @@ export default function App() {
           {screen === "LOBBY" && <LobbyScreen />}
         </div>
       )}
+
+      {/* Rendered once here, not per-screen, so chat/voice survive the lobby-to-game transition (§28, §69). */}
+      {room && me && (
+        <>
+          <ChatDock chat={chat} myPlayerId={me.id} />
+          <VoiceDock
+            voice={voice}
+            available={room.voice.available}
+            participants={voiceParticipants}
+            players={room.players}
+            myPlayerId={me.id}
+          />
+        </>
+      )}
+
+      {confirmLeave && (
+        <ConfirmLeaveModal
+          onCancel={() => setConfirmLeave(false)}
+          onLeave={() => {
+            setConfirmLeave(false);
+            void api.leaveRoom();
+            clearSession();
+            useGame.getState().reset();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ConfirmLeaveModal({ onCancel, onLeave }: { onCancel: () => void; onLeave: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Leave room?"
+      onClick={(e) => e.target === e.currentTarget && onCancel()}
+    >
+      <div className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)] p-5">
+        <h2 className="text-lg font-bold">Leave room?</h2>
+        <p className="mt-1.5 text-sm text-[var(--text-muted)]">
+          That back tap would take you out of the room. You'll lose your seat and, if a game is
+          running, your team plays on without you.
+        </p>
+        <div className="mt-5 flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 rounded-xl border border-[var(--border)] py-3 text-sm font-semibold"
+          >
+            Stay
+          </button>
+          <button
+            onClick={onLeave}
+            className="flex-1 rounded-xl bg-[var(--team-them)] py-3 text-sm font-bold text-white"
+          >
+            Leave
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

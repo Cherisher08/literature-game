@@ -22,14 +22,11 @@ import {
   type SetId,
   type TeamId,
 } from "@memory-game/shared";
-import { LayoutGrid, Sparkles, X } from "lucide-react";
+import { LayoutGrid, LogOut, Sparkles, X } from "lucide-react";
 import { LastAskPanel } from "../components/LastAskPanel.js";
 import { PlayerCard } from "../components/PlayerCard.js";
 import { PlayingCard } from "../components/PlayingCard.js";
 import { HalfSuitGrid } from "../components/HalfSuitGrid.js";
-import { ChatDock } from "../components/ChatDock.js";
-import { VoiceDock } from "../components/VoiceDock.js";
-import { useVoice } from "../voice/useVoice.js";
 import { AskDialog } from "../components/AskDialog.js";
 import { DeclareDialog } from "../components/DeclareDialog.js";
 import { DeclarationReveal, GameOverBanner } from "../components/DeclarationReveal.js";
@@ -40,14 +37,11 @@ import { describe } from "./NameAndHome.js";
 export function GameScreen() {
   const room = useGame((s) => s.room)!;
   const hydrating = useGame((s) => s.hydrating);
-  const chat = useGame((s) => s.chat);
   const setError = useGame((s) => s.setError);
   const error = useGame((s) => s.error);
   const reveal = useGame((s) => s.reveal);
   const gameOver = useGame((s) => s.gameOver);
   const setReveal = useGame((s) => s.setReveal);
-  const voiceParticipants = useGame((s) => s.voiceParticipants);
-  const voice = useVoice();
   const me = useMe();
 
   const [askOpen, setAskOpen] = useState(false);
@@ -216,17 +210,6 @@ export function GameScreen() {
         </div>
       )}
 
-      <ChatDock chat={chat} myPlayerId={game.myPlayerId} />
-
-      {/* §69: optional, non-blocking. Absent entirely when unconfigured. */}
-      <VoiceDock
-        voice={voice}
-        available={room.voice.available}
-        participants={voiceParticipants}
-        players={game.players}
-        myPlayerId={game.myPlayerId}
-      />
-
       {reveal && (
         <DeclarationReveal result={reveal} myTeamId={myTeam} onDismiss={() => setReveal(null)} />
       )}
@@ -298,8 +281,8 @@ function TablePanel({
   const teammates = game.players.filter((p) => p.teamId === myTeam);
 
   return (
-    <div className="space-y-4">
-      <Group title="Opponents">
+    <div className="space-y-5">
+      <Group title="Opponents" tone="them">
         {opponents.map((p) => (
           <PlayerCard
             key={p.id}
@@ -313,7 +296,7 @@ function TablePanel({
         ))}
       </Group>
 
-      <Group title="Your team">
+      <Group title="Your team" tone="us">
         {teammates.map((p) => (
           <PlayerCard
             key={p.id}
@@ -328,9 +311,15 @@ function TablePanel({
       </Group>
 
       <section>
-        <h2 className="mb-2 text-xs font-semibold tracking-wider text-[var(--text-muted)] uppercase">
-          Half-suits · {game.resolvedSets.length}/{game.activeSetIds.length}
-        </h2>
+        <div className="mb-2 flex items-center gap-2">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" aria-hidden="true" />
+          <h2 className="text-xs font-semibold tracking-wider text-[var(--text-muted)] uppercase">
+            Half-suits
+          </h2>
+          <span className="ml-auto text-[11px] font-bold tabular-nums text-[var(--accent)]">
+            {game.resolvedSets.length}/{game.activeSetIds.length}
+          </span>
+        </div>
         <HalfSuitGrid
           activeSetIds={game.activeSetIds}
           resolvedSets={game.resolvedSets}
@@ -339,6 +328,18 @@ function TablePanel({
           declaringSet={Boolean(game.declarationWindow)}
         />
       </section>
+
+      <button
+        onClick={() => {
+          if (!confirm("Leave this game? Your team plays on without you.")) return;
+          void api.leaveRoom();
+          clearSession();
+          useGame.getState().reset();
+        }}
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-4 py-3 text-sm text-[var(--text-muted)]"
+      >
+        <LogOut size={16} /> Leave room
+      </button>
     </div>
   );
 }
@@ -367,12 +368,27 @@ function Score({
   );
 }
 
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
+function Group({
+  title,
+  tone,
+  children,
+}: {
+  title: string;
+  tone: "us" | "them";
+  children: React.ReactNode;
+}) {
   return (
     <section>
-      <h2 className="mb-2 text-xs font-semibold tracking-wider text-[var(--text-muted)] uppercase">
-        {title}
-      </h2>
+      <div className="mb-2 flex items-center gap-2">
+        <span
+          className="h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ background: tone === "us" ? "var(--team-us)" : "var(--team-them)" }}
+          aria-hidden="true"
+        />
+        <h2 className="text-xs font-semibold tracking-wider text-[var(--text-muted)] uppercase">
+          {title}
+        </h2>
+      </div>
       <div className="grid gap-2">{children}</div>
     </section>
   );

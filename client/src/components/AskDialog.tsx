@@ -73,7 +73,24 @@ export function AskDialog({ game, myTeam, onClose, onAsk }: AskDialogProps) {
         : null;
 
   return (
-    <Modal title="Ask for a card" onClose={onClose}>
+    <Modal
+      title="Ask for a card"
+      onClose={onClose}
+      footer={
+        <button
+          disabled={Boolean(blocker) || busy}
+          onClick={async () => {
+            if (!targetId || !cardId) return;
+            setBusy(true);
+            await onAsk(targetId, cardId);
+            setBusy(false);
+          }}
+          className="w-full rounded-xl bg-[var(--team-us)] py-3.5 font-bold text-[#07281a] disabled:opacity-35"
+        >
+          {busy ? "Asking…" : "Ask"}
+        </button>
+      }
+    >
       <Step n={1} label="Who are you asking?" done={Boolean(targetId)} />
       <div className="mb-5 flex flex-wrap gap-2">
         {targets.map((p) => {
@@ -104,12 +121,7 @@ export function AskDialog({ game, myTeam, onClose, onAsk }: AskDialogProps) {
 
       {targetId && (
         <>
-          <Step
-            n={2}
-            label="Which half-suit?"
-            hint="Only sets you already hold a card of can be asked for"
-            done={Boolean(setId)}
-          />
+          <Step n={2} label="Which half-suit?" hint="" done={Boolean(setId)} />
           <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {mySets.map((s) => {
               const active = setId === s.setId;
@@ -138,12 +150,7 @@ export function AskDialog({ game, myTeam, onClose, onAsk }: AskDialogProps) {
 
       {chosenSet && (
         <>
-          <Step
-            n={3}
-            label="Which card?"
-            hint="You may ask for a card you already hold — it can be a useful bluff"
-            done={Boolean(cardId)}
-          />
+          <Step n={3} label="Which card?" hint="" done={Boolean(cardId)} />
           <div className="mb-5 flex flex-wrap gap-2">
             {chosenSet.cardIds.map((id) => {
               const c = getCard(id)!;
@@ -151,12 +158,7 @@ export function AskDialog({ game, myTeam, onClose, onAsk }: AskDialogProps) {
               const active = cardId === id;
               return (
                 <div key={id} className="relative">
-                  <PlayingCard
-                    card={c}
-                    size="md"
-                    selected={active}
-                    onClick={() => setCardId(id)}
-                  />
+                  <PlayingCard card={c} size="md" selected={active} onClick={() => setCardId(id)} />
                   {owned && (
                     <span
                       className="pointer-events-none absolute -top-1.5 -right-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold"
@@ -171,31 +173,6 @@ export function AskDialog({ game, myTeam, onClose, onAsk }: AskDialogProps) {
           </div>
         </>
       )}
-
-      {/* A plain-language summary, so nobody confirms the wrong card. */}
-      <div className="mb-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-center text-sm">
-        {target && card ? (
-          <>
-            Ask <span className="font-bold">{target.name}</span> for the{" "}
-            <span className="font-bold text-[var(--accent)]">{cardAccessibleName(card)}</span>
-          </>
-        ) : (
-          <span className="text-[var(--text-muted)]">{blocker}</span>
-        )}
-      </div>
-
-      <button
-        disabled={Boolean(blocker) || busy}
-        onClick={async () => {
-          if (!targetId || !cardId) return;
-          setBusy(true);
-          await onAsk(targetId, cardId);
-          setBusy(false);
-        }}
-        className="w-full rounded-xl bg-[var(--team-us)] py-3.5 font-bold text-[#07281a] disabled:opacity-35"
-      >
-        {busy ? "Asking…" : "Ask"}
-      </button>
     </Modal>
   );
 }
@@ -203,10 +180,13 @@ export function AskDialog({ game, myTeam, onClose, onAsk }: AskDialogProps) {
 export function Modal({
   title,
   onClose,
+  footer,
   children,
 }: {
   title: string;
   onClose: () => void;
+  /** Rendered outside the scrollable body, pinned to the bottom — the primary action stays reachable without scrolling. */
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -217,14 +197,21 @@ export function Modal({
       aria-label={title}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-[var(--border)] bg-[var(--surface-raised)] p-5 sm:rounded-2xl">
-        <div className="mb-4 flex items-center justify-between">
+      <div className="flex max-h-[92vh] w-full max-w-lg flex-col rounded-t-2xl border border-[var(--border)] bg-[var(--surface-raised)] sm:rounded-2xl">
+        <div className="flex items-center justify-between px-5 pt-5 pb-4">
           <h2 className="text-lg font-bold">{title}</h2>
-          <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 hover:bg-white/5">
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-lg p-1.5 hover:bg-white/5"
+          >
             <X size={20} />
           </button>
         </div>
-        {children}
+        <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-5 pb-5">{children}</div>
+        {footer && (
+          <div className="shrink-0 border-t border-[var(--border)] p-5 pt-3">{footer}</div>
+        )}
       </div>
     </div>
   );
@@ -259,3 +246,4 @@ export function Step({
     </div>
   );
 }
+

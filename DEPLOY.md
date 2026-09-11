@@ -78,6 +78,36 @@ room. The API logs state whether voice came up:
 
 ---
 
+## Changing the URL
+
+Render appends a random suffix (`literature-web-6qai`) when the name you asked
+for is already taken — `.onrender.com` subdomains are global across all Render
+users, so common words are long gone.
+
+**To rename:** dashboard → the service → **Settings** → **Name**. The URL follows
+the name. Pick something distinctive enough to be unclaimed.
+
+**To use your own domain:** Settings → **Custom Domains** → add the hostname and
+create the CNAME Render shows you. TLS is issued automatically. Worth doing if
+you own a domain — the URL then survives moving off Render.
+
+**Either way, fix the wiring afterwards.** The two services address each other by
+URL:
+
+| You renamed | Then you must |
+|---|---|
+| the web service | Update `CORS_ORIGINS` on the API to the new origin, exactly, no trailing slash |
+| the API service | Update `VITE_SERVER_URL` on the web service **and redeploy it** — that value is compiled into the bundle, so a restart is not enough |
+
+Skipping the first one is the nastier failure: the server stays healthy, the page
+loads, and every browser silently refuses the socket.
+
+> Renaming in the dashboard is safe. Changing `name:` in `render.yaml` and
+> re-syncing the blueprint may create a *new* service instead of renaming the
+> existing one, leaving you with two.
+
+---
+
 ## Things that will surprise you
 
 **The API sleeps.** Free web services stop after 15 minutes with no inbound

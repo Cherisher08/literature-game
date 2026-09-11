@@ -46,7 +46,17 @@ export function DeclareDialog({ game, onClose, onDeclare }: DeclareDialogProps) 
           {openSets.map((s) => (
             <button
               key={s.setId}
-              onClick={() => setSetId(s.setId)}
+              onClick={() => {
+                setSetId(s.setId);
+                // §21: a card you hold yourself is a known fact, not a guess — pre-fill it so only the unknowns need a real decision.
+                setAssign((a) => {
+                  const next = { ...a };
+                  for (const cardId of s.cardIds) {
+                    if (game.myHand.some((c) => c.id === cardId)) next[cardId] = game.myPlayerId;
+                  }
+                  return next;
+                });
+              }}
               className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-sm font-semibold"
             >
               {s.name}
@@ -57,10 +67,53 @@ export function DeclareDialog({ game, onClose, onDeclare }: DeclareDialogProps) 
     );
   }
 
+  const reviewFooter = (
+    <div className="flex gap-3">
+      <button
+        onClick={() => setReviewing(false)}
+        className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] py-3 text-sm font-semibold"
+      >
+        <ArrowLeft size={16} /> Change
+      </button>
+      <button
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          await onDeclare(
+            chosen.setId,
+            chosen.cardIds.map((cardId) => ({ cardId, playerId: assign[cardId]! })),
+          );
+          setBusy(false);
+        }}
+        className="flex-[2] rounded-xl bg-[var(--accent)] py-3 font-bold text-[#2a1e02] disabled:opacity-40"
+      >
+        Confirm declaration
+      </button>
+    </div>
+  );
+
+  const assignFooter = (
+    <div className="flex gap-3">
+      <button
+        onClick={() => setSetId(null)}
+        className="flex items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] px-4 py-3 text-sm"
+      >
+        <ArrowLeft size={16} />
+      </button>
+      <button
+        disabled={!complete}
+        onClick={() => setReviewing(true)}
+        className="flex-1 rounded-xl bg-[var(--accent)] py-3 font-bold text-[#2a1e02] disabled:opacity-35"
+      >
+        Review {Object.keys(assign).length}/6
+      </button>
+    </div>
+  );
+
   // Step 3 — review, everything still reversible
   if (reviewing) {
     return (
-      <Modal title="Review declaration" onClose={onClose}>
+      <Modal title="Review declaration" onClose={onClose} footer={reviewFooter}>
         <div className="mb-4 flex items-start gap-2 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 p-3">
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-[var(--accent)]" />
           <p className="text-xs">
@@ -95,35 +148,13 @@ export function DeclareDialog({ game, onClose, onDeclare }: DeclareDialogProps) 
           })}
         </div>
 
-        <div className="flex gap-3">
-          <button
-            onClick={() => setReviewing(false)}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] py-3 text-sm font-semibold"
-          >
-            <ArrowLeft size={16} /> Change
-          </button>
-          <button
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              await onDeclare(
-                chosen.setId,
-                chosen.cardIds.map((cardId) => ({ cardId, playerId: assign[cardId]! })),
-              );
-              setBusy(false);
-            }}
-            className="flex-[2] rounded-xl bg-[var(--accent)] py-3 font-bold text-[#2a1e02] disabled:opacity-40"
-          >
-            Confirm declaration
-          </button>
-        </div>
       </Modal>
     );
   }
 
   // Step 2 — assign each card to a player
   return (
-    <Modal title={`Declare — ${chosen.name}`} onClose={onClose}>
+    <Modal title={`Declare — ${chosen.name}`} onClose={onClose} footer={assignFooter}>
       <Step
         n={2}
         label="Who on your team holds each card?"
@@ -132,47 +163,37 @@ export function DeclareDialog({ game, onClose, onDeclare }: DeclareDialogProps) 
       />
 
       <div className="mb-4 space-y-3">
-        {chosen.cardIds.map((cardId) => (
-          <div key={cardId} className="flex items-center gap-3">
-            <PlayingCard card={getCard(cardId)!} size="sm" />
-            <div className="flex flex-1 flex-wrap gap-1.5">
-              {targets.map((p) => {
-                const active = assign[cardId] === p.id;
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => setAssign((a) => ({ ...a, [cardId]: p.id }))}
-                    aria-pressed={active}
-                    className="rounded-lg border px-2.5 py-1.5 text-xs"
-                    style={{
-                      borderColor: active ? "var(--accent)" : "var(--border)",
-                      background: active ? "rgba(251,191,36,.12)" : "transparent",
-                      fontWeight: active ? 700 : 400,
-                    }}
-                  >
-                    {p.name}
-                  </button>
-                );
-              })}
+        {chosen.cardIds.map((cardId) => {
+          // §21: a card you hold yourself is a known fact — locked, not just pre-filled, so it can't be misclicked away.
+          const mine = game.myHand.some((c) => c.id === cardId);
+          return (
+            <div key={cardId} className="flex items-center gap-3">
+              <PlayingCard card={getCard(cardId)!} size="sm" />
+              <div className="flex flex-1 flex-wrap gap-1.5">
+                {targets.map((p) => {
+                  const active = assign[cardId] === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => setAssign((a) => ({ ...a, [cardId]: p.id }))}
+                      disabled={mine}
+                      aria-pressed={active}
+                      className="rounded-lg border px-2.5 py-1.5 text-xs disabled:cursor-default"
+                      style={{
+                        borderColor: active ? "var(--accent)" : "var(--border)",
+                        background: active ? "rgba(251,191,36,.12)" : "transparent",
+                        fontWeight: active ? 700 : 400,
+                        opacity: mine && !active ? 0.35 : 1,
+                      }}
+                    >
+                      {p.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex gap-3">
-        <button
-          onClick={() => setSetId(null)}
-          className="flex items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] px-4 py-3 text-sm"
-        >
-          <ArrowLeft size={16} />
-        </button>
-        <button
-          disabled={!complete}
-          onClick={() => setReviewing(true)}
-          className="flex-1 rounded-xl bg-[var(--accent)] py-3 font-bold text-[#2a1e02] disabled:opacity-35"
-        >
-          Review {Object.keys(assign).length}/6
-        </button>
+          );
+        })}
       </div>
     </Modal>
   );

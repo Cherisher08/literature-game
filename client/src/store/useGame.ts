@@ -7,18 +7,33 @@
  */
 
 import { create } from "zustand";
-import type {
-  ChatMessage,
-  ClientRoomState,
-  DeclarationResult,
-  GameEvent,
-  TeamId,
+import {
+  ROOM_CODE_LENGTH,
+  type ChatMessage,
+  type ClientRoomState,
+  type DeclarationResult,
+  type GameEvent,
+  type TeamId,
 } from "@memory-game/shared";
 
 export type Screen = "NAME" | "HOME" | "LOBBY" | "GAME";
 export type ConnectionState = "CONNECTING" | "CONNECTED" | "RECONNECTING" | "SERVER_GONE";
 
 const SESSION_KEY = "literature.session";
+
+/**
+ * A room link opened cold (e.g. /CPYWKG) names the room the visitor meant to
+ * reach. Captured once at module load — before the router rewrites the address
+ * bar to /home — so the join screen can still pre-fill it later (§35 deep link).
+ */
+export const INITIAL_ROOM_CODE: string | null = (() => {
+  try {
+    const seg = window.location.pathname.slice(1).toUpperCase();
+    return seg.length === ROOM_CODE_LENGTH && /^[A-Z0-9]+$/.test(seg) ? seg : null;
+  } catch {
+    return null;
+  }
+})();
 
 /**
  * §35: per-TAB storage, deliberately not localStorage.

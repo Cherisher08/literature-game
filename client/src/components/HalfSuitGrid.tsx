@@ -6,10 +6,8 @@
  * least one is what makes the set legal to ask in (§48).
  */
 
-import { CARD_SETS, type Card, type ResolvedSet, type SetId, type TeamId } from "@memory-game/shared";
+import { CARD_SETS, SUIT_SYMBOL, type Card, type ResolvedSet, type SetId, type TeamId } from "@memory-game/shared";
 import { Check, X, Zap } from "lucide-react";
-
-const SUIT_GLYPH: Record<string, string> = { S: "S", H: "H", D: "D", C: "C" };
 
 export interface HalfSuitGridProps {
   activeSetIds: SetId[];
@@ -48,33 +46,42 @@ export function HalfSuitGrid({
               ? "rgba(251,191,36,.45)"
               : "var(--border)";
 
+        const suitColor =
+          set.suit === "H" || set.suit === "D" ? "var(--card-red)" : "var(--text)";
+
         return (
           <div
             key={set.setId}
-            className="rounded-xl border p-2.5"
+            className="relative overflow-hidden rounded-2xl border p-2.5 transition-colors"
             style={{
               borderColor: border,
-              background: resolved ? "rgba(255,255,255,.03)" : "var(--surface)",
-              opacity: resolved ? 0.7 : 1,
+              background: resolved
+                ? `linear-gradient(135deg, color-mix(in srgb, ${ours ? "var(--team-us)" : "var(--team-them)"} 10%, var(--surface)), var(--surface))`
+                : mine > 0
+                  ? "color-mix(in srgb, var(--accent) 6%, var(--surface))"
+                  : "var(--surface)",
+              opacity: resolved ? 0.75 : 1,
+              transitionDuration: "var(--dur-fast)",
             }}
           >
             <div className="flex items-start justify-between gap-1">
               <span className="text-[11px] leading-tight font-semibold">{set.name}</span>
               {set.suit !== "NONE" && (
                 <span
-                  className="shrink-0 text-[10px] font-bold"
+                  className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[12px] leading-none font-bold"
                   style={{
-                    color: set.suit === "H" || set.suit === "D" ? "var(--card-red)" : "var(--text-muted)",
+                    color: suitColor,
+                    background: "color-mix(in srgb, currentColor 12%, transparent)",
                   }}
                 >
-                  {SUIT_GLYPH[set.suit]}
+                  {SUIT_SYMBOL[set.suit]}
                 </span>
               )}
             </div>
 
             {resolved ? (
               <div
-                className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold"
+                className="mt-2 flex items-center gap-1 text-[11px] font-bold"
                 style={{ color: ours ? "var(--team-us)" : "var(--team-them)" }}
               >
                 {ours ? <Check size={12} /> : <X size={12} />}
@@ -83,7 +90,7 @@ export function HalfSuitGrid({
                 {resolved.stolen && <Zap size={11} aria-label="Stolen on a failed declaration" />}
               </div>
             ) : (
-              <div className="mt-1.5 flex items-center gap-1.5">
+              <div className="mt-2 flex items-center gap-1.5">
                 <SetPips held={mine} />
                 <span className="text-[10px] text-[var(--text-muted)]">
                   {mine > 0 ? `you hold ${mine}` : "none"}
@@ -104,8 +111,12 @@ function SetPips({ held }: { held: number }) {
       {Array.from({ length: 6 }).map((_, i) => (
         <span
           key={i}
-          className="h-1.5 w-1.5 rounded-full"
-          style={{ background: i < held ? "var(--accent)" : "rgba(255,255,255,.14)" }}
+          className="h-1.75 w-1.75 rounded-full transition-colors"
+          style={{
+            background: i < held ? "var(--accent)" : "rgba(255,255,255,.14)",
+            boxShadow: i < held ? "0 0 5px color-mix(in srgb, var(--accent) 70%, transparent)" : "none",
+            transitionDuration: "var(--dur-fast)",
+          }}
         />
       ))}
     </div>
