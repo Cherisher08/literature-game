@@ -33,6 +33,7 @@ export function getSocket(): AppSocket {
   if (socket) return socket;
   // Same-origin in dev via the Vite proxy; VITE_SERVER_URL overrides in prod.
   const url = import.meta.env["VITE_SERVER_URL"] as string | undefined;
+  console.log("SERVER URL:", url)
   socket = url
     ? io(url, { transports: ["websocket"], autoConnect: true })
     : io({ transports: ["websocket"], autoConnect: true });
