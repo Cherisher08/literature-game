@@ -99,6 +99,11 @@ export function projectRoomFor(room: GameRoom, playerId: string): ClientRoomStat
     // §69.4: advisory only.
     voice: { available: isVoiceConfigured(), participants: [...room.voiceParticipants] },
     players: publicPlayers(room, room.game),
+    spectators: (room.spectators || []).map((s) => ({
+      id: s.id,
+      name: s.name,
+      connected: s.connected,
+    })),
     ...(room.game ? { game: projectGameFor(room, room.game, playerId) } : {}),
     seq: room.seq,
   };

@@ -76,6 +76,7 @@ export const joinRoomSchema = z.object({
   roomId: roomIdSchema,
   name: nameSchema,
   sessionToken: z.string().min(8).max(128).optional(),
+  spectateOnly: z.boolean().optional(),
 });
 
 export const askCardSchema = envelope(

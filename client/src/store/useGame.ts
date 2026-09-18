@@ -16,10 +16,27 @@ import {
   type TeamId,
 } from "@memory-game/shared";
 
-export type Screen = "LOADING" | "NAME" | "HOME" | "LOBBY" | "GAME";
+export type Screen = "LOADING" | "HOME" | "LITERATURE_ROOM" | "NAME" | "LOBBY" | "GAME";
 export type ConnectionState = "CONNECTING" | "CONNECTED" | "RECONNECTING" | "SERVER_GONE";
 
 const SESSION_KEY = "literature.session";
+const USERNAME_KEY = "literature.username";
+
+export function loadSavedUsername(): string {
+  try {
+    return globalThis.localStorage?.getItem(USERNAME_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function saveUsername(name: string): void {
+  try {
+    globalThis.localStorage?.setItem(USERNAME_KEY, name);
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * A room link opened cold (e.g. /CPYWKG) names the room the visitor meant to
@@ -119,10 +136,10 @@ interface GameStore {
 
 export const useGame = create<GameStore>((set, get) => ({
   // A stored session means a reconnect attempt is coming (§35) — hold on a
-  // loading screen rather than flashing the name form before it resolves.
-  screen: loadSession() ? "LOADING" : "NAME",
+  // loading screen rather than flashing the home screen before it resolves.
+  screen: loadSession() ? "LOADING" : (INITIAL_ROOM_CODE ? "LITERATURE_ROOM" : "HOME"),
   connection: "CONNECTING",
-  name: "",
+  name: loadSession()?.name || loadSavedUsername(),
   playerId: null,
   room: null,
   chat: [],
@@ -135,7 +152,10 @@ export const useGame = create<GameStore>((set, get) => ({
 
   setScreen: (screen) => set({ screen }),
   setConnection: (connection) => set({ connection }),
-  setName: (name) => set({ name }),
+  setName: (name) => {
+    saveUsername(name);
+    set({ name });
+  },
   setError: (error) => set({ error }),
   setIdentity: (playerId) => set({ playerId }),
 
@@ -184,6 +204,16 @@ export const useMe = () => {
   const room = useGame((s) => s.room);
   const playerId = useGame((s) => s.playerId);
   return room?.players.find((p) => p.id === playerId) ?? null;
+};
+
+export const useIsSpectator = () => {
+  const room = useGame((s) => s.room);
+  const playerId = useGame((s) => s.playerId);
+  if (!room || !playerId) return false;
+  return Boolean(
+    room.spectators?.some((s) => s.id === playerId) ||
+    (!room.players.some((p) => p.id === playerId) && playerId)
+  );
 };
 
 export const useIsHost = () => {

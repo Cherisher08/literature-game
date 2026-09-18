@@ -12,6 +12,7 @@ import {
   Check,
   Copy,
   Crown,
+  Eye,
   Link2,
   LogOut,
   LogIn,
@@ -22,7 +23,7 @@ import {
 } from "lucide-react";
 import { BOT_DIFFICULTIES, type BotDifficulty, type PublicPlayer, type TeamId } from "@memory-game/shared";
 import { api } from "../socket/client.js";
-import { clearSession, useGame, useIsHost, useMe } from "../store/useGame.js";
+import { clearSession, useGame, useIsHost, useIsSpectator, useMe } from "../store/useGame.js";
 import { describe } from "./NameAndHome.js";
 
 const TEAM_LABEL: Record<TeamId, string> = { A: "Team A", B: "Team B" };
@@ -58,7 +59,9 @@ export function LobbyScreen() {
   const reset = useGame((s) => s.reset);
   const setError = useGame((s) => s.setError);
   const error = useGame((s) => s.error);
+  const playerId = useGame((s) => s.playerId);
   const isHost = useIsHost();
+  const isSpectator = useIsSpectator();
   const me = useMe();
 
   const [copied, setCopied] = useState(false);
@@ -167,12 +170,33 @@ export function LobbyScreen() {
         </button>
       </div>
 
+      {/* Spectator Mode Banner */}
+      {isSpectator && (
+        <div className="flex items-center gap-3 rounded-2xl border border-[var(--accent)]/50 bg-[var(--accent)]/10 p-4 text-left">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--accent)]/20 text-[var(--accent)]">
+            <Eye size={20} />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-[var(--accent)]">Spectator Mode</h2>
+            <p className="text-xs text-[var(--text-muted)]">
+              {room.players.length >= seats
+                ? "This room is full. You are tuned in as a spectator and will watch the game live once started."
+                : "You joined as a spectator. You can listen in, chat, and watch the match live."}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Team selection (§71) — everyone picks their own, not just the host */}
       <section>
         <div className="mb-2 flex items-baseline justify-between">
           <h2 className="text-sm font-semibold">Choose your team</h2>
           <span className="text-xs text-[var(--text-muted)]">
-            {me?.teamId ? "Tap the other team to switch" : `${half} per side`}
+            {isSpectator
+              ? "Spectating live audience"
+              : me?.teamId
+                ? "Tap the other team to switch"
+                : `${half} per side`}
           </span>
         </div>
 
@@ -228,20 +252,24 @@ export function LobbyScreen() {
                 {/* §71.4: a disabled control states why. */}
                 <button
                   onClick={() => void pick(teamId)}
-                  disabled={blocked || mine}
+                  disabled={isSpectator || blocked || mine}
                   className="mt-auto w-full rounded-lg border px-2 py-1.5 text-[11px] font-semibold disabled:cursor-default"
                   style={{
                     borderColor: mine ? "var(--accent)" : "var(--border)",
-                    color: mine
-                      ? "var(--accent)"
-                      : blocked
-                        ? "var(--team-them)"
-                        : "var(--text)",
+                    color: isSpectator
+                      ? "var(--text-muted)"
+                      : mine
+                        ? "var(--accent)"
+                        : blocked
+                          ? "var(--team-them)"
+                          : "var(--text)",
                     background: mine ? "transparent" : "rgba(255,255,255,.04)",
-                    opacity: blocked ? 0.6 : 1,
+                    opacity: isSpectator || blocked ? 0.6 : 1,
                   }}
                 >
-                  {mine ? (
+                  {isSpectator ? (
+                    "Spectating"
+                  ) : mine ? (
                     <span className="flex items-center justify-center gap-1">
                       <Check size={12} /> You're here
                     </span>
@@ -264,12 +292,13 @@ export function LobbyScreen() {
             teams cannot swap anyone without a player leaving the room. */}
         <button
           onClick={() => void pick(null)}
-          disabled={!me?.teamId}
-          aria-pressed={!me?.teamId}
+          disabled={isSpectator || !me?.teamId}
+          aria-pressed={!isSpectator && !me?.teamId}
           className="mt-3 w-full rounded-2xl border-2 border-dashed p-3 text-left disabled:cursor-default"
           style={{
-            borderColor: !me?.teamId ? "var(--accent)" : "var(--border)",
-            background: !me?.teamId ? "rgba(251,191,36,.06)" : "transparent",
+            borderColor: !isSpectator && !me?.teamId ? "var(--accent)" : "var(--border)",
+            background: !isSpectator && !me?.teamId ? "rgba(251,191,36,.06)" : "transparent",
+            opacity: isSpectator ? 0.6 : 1,
           }}
         >
           <div className="flex items-center justify-between">
@@ -293,7 +322,11 @@ export function LobbyScreen() {
           </div>
 
           <div className="mt-2 text-[11px] font-semibold">
-            {!me?.teamId ? (
+            {isSpectator ? (
+              <span className="text-[var(--text-muted)]">
+                Spectators do not hold seats or join teams
+              </span>
+            ) : !me?.teamId ? (
               <span className="text-[var(--text-muted)]">
                 You'll be placed automatically at start
               </span>
@@ -315,6 +348,33 @@ export function LobbyScreen() {
           </p>
         )}
       </section>
+
+      {/* Spectators List */}
+      {room.spectators && room.spectators.length > 0 && (
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="mb-2.5 flex items-center justify-between">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+              <Eye size={15} className="text-[var(--accent)]" /> Spectators ({room.spectators.length})
+            </h2>
+            <span className="text-[11px] text-[var(--text-muted)]">Live audience</span>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {room.spectators.map((s) => (
+              <span
+                key={s.id}
+                className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-1.5 text-xs"
+              >
+                <span className={`h-2 w-2 rounded-full ${s.connected ? "bg-[var(--team-us)]" : "bg-[var(--text-muted)]"}`} />
+                <span className={s.id === playerId ? "font-bold text-[var(--accent)]" : "text-[var(--text)]"}>
+                  {s.name}
+                  {s.id === playerId ? " (you)" : ""}
+                </span>
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* §73: bots fill empty seats, on a chosen side. Host only, lobby only. */}
       {isHost && missing > 0 && (
@@ -395,7 +455,9 @@ export function LobbyScreen() {
           </>
         ) : (
           <p className="text-center text-sm text-[var(--text-muted)]">
-            {startReason ?? "Waiting for the host to start"}
+            {isSpectator
+              ? (startReason ? `Spectating: ${startReason}` : "Spectating: Waiting for host to start match")
+              : (startReason ?? "Waiting for the host to start")}
           </p>
         )}
 

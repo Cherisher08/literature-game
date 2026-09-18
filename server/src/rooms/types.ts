@@ -41,6 +41,7 @@ export interface GameRoom {
   /** §72: chosen at creation. Join capacity, deck and teams all follow it. */
   playerCount: PlayerCount;
   players: RoomPlayer[];
+  spectators: RoomPlayer[];
   /** Present once the game starts. Owned by the engine (§57). */
   game?: GameState;
   chatMessages: ChatMessage[];

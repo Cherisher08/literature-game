@@ -124,6 +124,7 @@ export class RoomManager {
       status: "LOBBY",
       playerCount,
       players: [player],
+      spectators: [],
       chatMessages: [],
       createdAt: now,
       lastActivityAt: now,
@@ -139,11 +140,36 @@ export class RoomManager {
     roomId: string,
     name: string,
     socketId: string,
-  ): { room: GameRoom; player: RoomPlayer } | { error: ErrorCode } {
+    options?: { spectateOnly?: boolean; allowSpectate?: boolean },
+  ): { room: GameRoom; player: RoomPlayer; isSpectator: boolean } | { error: ErrorCode } {
     const room = this.rooms.get(roomId);
     if (!room) return { error: "ROOM_NOT_FOUND" };
-    if (room.players.length >= room.playerCount) return { error: "ROOM_FULL" };
-    if (room.status !== "LOBBY") return { error: "GAME_ALREADY_STARTED" };
+
+    const shouldSpectate =
+      Boolean(options?.spectateOnly) ||
+      room.players.length >= room.playerCount ||
+      room.status !== "LOBBY";
+
+    if (shouldSpectate) {
+      if (options?.allowSpectate === false) {
+        if (room.players.length >= room.playerCount) return { error: "ROOM_FULL" };
+        if (room.status !== "LOBBY") return { error: "GAME_ALREADY_STARTED" };
+      }
+
+      const spectator: RoomPlayer = {
+        id: randomUUID(),
+        name,
+        seatPosition: 0,
+        connected: true,
+        sessionToken: randomUUID(),
+        socketId,
+      };
+
+      room.spectators.push(spectator);
+      this.touch(room);
+      this.cancelTimer(room.id, "empty");
+      return { room, player: spectator, isSpectator: true };
+    }
 
     const taken = new Set(room.players.map((p) => p.seatPosition));
     let seat = 1;
@@ -163,7 +189,7 @@ export class RoomManager {
     this.touch(room);
     this.cancelTimer(room.id, "empty");
 
-    return { room, player };
+    return { room, player, isSpectator: false };
   }
 
   // -------------------------------------------------------------------------
@@ -233,7 +259,7 @@ export class RoomManager {
 
   /** §54: a room of nothing but bots is abandoned and must not be kept alive. */
   hasHumans(room: GameRoom): boolean {
-    return room.players.some((p) => !p.bot);
+    return room.players.some((p) => !p.bot) || room.spectators.length > 0;
   }
 
   /** §35: resume a seat with a session token. */
@@ -241,28 +267,41 @@ export class RoomManager {
     roomId: string,
     sessionToken: string,
     socketId: string,
-  ): { room: GameRoom; player: RoomPlayer } | { error: ErrorCode } {
+  ): { room: GameRoom; player: RoomPlayer; isSpectator: boolean } | { error: ErrorCode } {
     const room = this.rooms.get(roomId);
     if (!room) return { error: "ROOM_NOT_FOUND" };
 
     const player = room.players.find((p) => p.sessionToken === sessionToken);
-    if (!player) return { error: "INVALID_SESSION" };
+    if (player) {
+      // Hand control back before marking connected — a bot mid-delay that still
+      // fires after this checks `bot` on the live seat and finds it gone (§73).
+      if (player.botControlled) {
+        delete player.bot;
+        delete player.botControlled;
+      }
+      this.cancelTimer(room.id, `bot-takeover:${player.id}`);
 
-    // Hand control back before marking connected — a bot mid-delay that still
-    // fires after this checks `bot` on the live seat and finds it gone (§73).
-    if (player.botControlled) {
-      delete player.bot;
-      delete player.botControlled;
+      player.connected = true;
+      player.socketId = socketId;
+      delete player.disconnectedAt;
+
+      this.touch(room);
+      this.cancelTimer(room.id, "empty");
+      return { room, player, isSpectator: false };
     }
-    this.cancelTimer(room.id, `bot-takeover:${player.id}`);
 
-    player.connected = true;
-    player.socketId = socketId;
-    delete player.disconnectedAt;
+    const spectator = room.spectators.find((p) => p.sessionToken === sessionToken);
+    if (spectator) {
+      spectator.connected = true;
+      spectator.socketId = socketId;
+      delete spectator.disconnectedAt;
 
-    this.touch(room);
-    this.cancelTimer(room.id, "empty");
-    return { room, player };
+      this.touch(room);
+      this.cancelTimer(room.id, "empty");
+      return { room, player: spectator, isSpectator: true };
+    }
+
+    return { error: "INVALID_SESSION" };
   }
 
   /**
@@ -291,17 +330,30 @@ export class RoomManager {
     if (!room) return undefined;
 
     const player = room.players.find((p) => p.id === playerId);
-    if (!player) return undefined;
+    if (player) {
+      player.connected = false;
+      player.disconnectedAt = Date.now();
+      delete player.socketId;
+      this.setVoicePresence(room, playerId, false);
 
-    player.connected = false;
-    player.disconnectedAt = Date.now();
-    delete player.socketId;
-    this.setVoicePresence(room, playerId, false);
+      this.reassignHostIfNeeded(room);
+      this.scheduleEmptyRoomCloseIfNeeded(room);
+      this.scheduleBotTakeoverIfNeeded(room, playerId);
+      return room;
+    }
 
-    this.reassignHostIfNeeded(room);
-    this.scheduleEmptyRoomCloseIfNeeded(room);
-    this.scheduleBotTakeoverIfNeeded(room, playerId);
-    return room;
+    const spectator = room.spectators.find((p) => p.id === playerId);
+    if (spectator) {
+      spectator.connected = false;
+      spectator.disconnectedAt = Date.now();
+      delete spectator.socketId;
+      this.setVoicePresence(room, playerId, false);
+
+      this.scheduleEmptyRoomCloseIfNeeded(room);
+      return room;
+    }
+
+    return undefined;
   }
 
   /** Lets the socket layer hear about a takeover so it can broadcast and let the bot runner pick up the turn — `RoomManager` has no socket/bot-runner reference of its own. */
@@ -325,16 +377,21 @@ export class RoomManager {
     const room = this.rooms.get(roomId);
     if (!room) return undefined;
 
-    room.players = room.players.filter((p) => p.id !== playerId);
-    room.voiceParticipants = room.voiceParticipants.filter((id) => id !== playerId);
-    if (room.game) {
-      room.game = {
-        ...room.game,
-        players: room.game.players.filter((p) => p.id !== playerId),
-      };
+    const isPlayer = room.players.some((p) => p.id === playerId);
+    if (isPlayer) {
+      room.players = room.players.filter((p) => p.id !== playerId);
+      if (room.game) {
+        room.game = {
+          ...room.game,
+          players: room.game.players.filter((p) => p.id !== playerId),
+        };
+      }
+    } else {
+      room.spectators = room.spectators.filter((p) => p.id !== playerId);
     }
+    room.voiceParticipants = room.voiceParticipants.filter((id) => id !== playerId);
 
-    if (room.players.length === 0) {
+    if (room.players.length === 0 && room.spectators.length === 0) {
       this.closeRoom(room.id, "EMPTY");
       return undefined;
     }
@@ -523,7 +580,9 @@ export class RoomManager {
    */
   private scheduleEmptyRoomCloseIfNeeded(room: GameRoom): void {
     // §73: bots are always "connected", so they must not hold a room open.
-    const anyConnected = room.players.some((p) => p.connected && !p.bot);
+    const anyConnected =
+      room.players.some((p) => p.connected && !p.bot) ||
+      room.spectators.some((s) => s.connected);
     if (anyConnected) {
       this.cancelTimer(room.id, "empty");
       return;
@@ -531,7 +590,11 @@ export class RoomManager {
     this.setTimer(room.id, "empty", EMPTY_ROOM_TIMEOUT_MS, () => {
       const current = this.rooms.get(room.id);
       if (!current) return;
-      if (current.players.some((p) => p.connected && !p.bot)) return;
+      if (
+        current.players.some((p) => p.connected && !p.bot) ||
+        current.spectators.some((s) => s.connected)
+      )
+        return;
       this.closeRoom(room.id, "EMPTY");
     });
   }

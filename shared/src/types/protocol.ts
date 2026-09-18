@@ -45,6 +45,12 @@ export interface PublicPlayer {
   botStandIn?: boolean;
 }
 
+export interface PublicSpectator {
+  id: string;
+  name: string;
+  connected: boolean;
+}
+
 export type RoomStatus = "LOBBY" | "PLAYING" | "FINISHED";
 
 export interface ClientGameState {
@@ -75,6 +81,7 @@ export interface ClientRoomState {
   /** §69.4: advisory. Nothing in the rules may depend on it. */
   voice: VoiceState;
   players: PublicPlayer[];
+  spectators: PublicSpectator[];
   /** Present only once the game has started. */
   game?: ClientGameState;
   /** §68.6: monotonic per room; a gap means resync. */
@@ -128,6 +135,8 @@ export interface JoinRoomPayload {
   name: string;
   /** Present when resuming a seat (§35). */
   sessionToken?: string;
+  /** True when the user explicitly requests to join as a spectator. */
+  spectateOnly?: boolean;
 }
 
 export interface CreateRoomPayload {
@@ -185,6 +194,8 @@ export interface JoinResult {
   /** Sent only to the owning socket. Never appears in a broadcast (§58). */
   sessionToken: string;
   state: ClientRoomState;
+  /** True if the user joined as a spectator. */
+  isSpectator?: boolean;
 }
 
 // ---------------------------------------------------------------------------

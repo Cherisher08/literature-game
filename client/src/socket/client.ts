@@ -75,12 +75,19 @@ export const api = {
       playerCount,
     }),
 
-  joinRoom: (roomId: string, name: string, protocolVersion: number, sessionToken?: string) =>
+  joinRoom: (
+    roomId: string,
+    name: string,
+    protocolVersion: number,
+    sessionToken?: string,
+    spectateOnly?: boolean,
+  ) =>
     request<"room:join", Ack<JoinResult>>("room:join", {
       protocolVersion,
       roomId,
       name,
       ...(sessionToken ? { sessionToken } : {}),
+      ...(spectateOnly ? { spectateOnly } : {}),
     }),
 
   leaveRoom: () => request<"room:leave", VoidAck>("room:leave"),

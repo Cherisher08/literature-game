@@ -4,14 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { PROTOCOL_VERSION } from "@memory-game/shared";
-import { HomeScreen, NameScreen } from "./screens/NameAndHome.js";
+import { GamesHub } from "./screens/GamesHub.js";
+import { LiteratureRoomScreen, NameScreen } from "./screens/NameAndHome.js";
 import { LobbyScreen } from "./screens/Lobby.js";
 import { GameScreen } from "./screens/Game.js";
 import { ChatDock } from "./components/ChatDock.js";
 import { VoiceDock } from "./components/VoiceDock.js";
 import { useVoice } from "./voice/useVoice.js";
 import { api, attachListeners, getSocket } from "./socket/client.js";
-import { clearSession, loadSession, useGame, useMe } from "./store/useGame.js";
+import { clearSession, loadSession, useGame, useIsSpectator, useMe } from "./store/useGame.js";
 
 // Syncs the URL (/home, /lobby, /:roomId) to `screen` so back has real history entries instead of none, which is what closed the tab.
 function useRouteSync(onBackPastRoom: () => void) {
@@ -23,7 +24,13 @@ function useRouteSync(onBackPastRoom: () => void) {
   const mounted = useRef(false);
 
   const target =
-    screen === "GAME" && roomId ? `/${roomId}` : screen === "LOBBY" && roomId ? "/lobby" : "/home";
+    screen === "GAME" && roomId
+      ? `/${roomId}`
+      : screen === "LOBBY" && roomId
+        ? "/lobby"
+        : screen === "LITERATURE_ROOM"
+          ? "/literature"
+          : "/home";
 
   // Forward: app state moved on (joined, started, left) — push the URL to match.
   useEffect(() => {
@@ -60,7 +67,10 @@ export default function App() {
   const room = useGame((s) => s.room);
   const chat = useGame((s) => s.chat);
   const voiceParticipants = useGame((s) => s.voiceParticipants);
+  const playerId = useGame((s) => s.playerId);
   const me = useMe();
+  const isSpectator = useIsSpectator();
+  const myId = playerId || me?.id;
   // Lifted above the screens so a voice call survives the lobby-to-game transition instead of dropping and reconnecting.
   const voice = useVoice();
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -132,7 +142,7 @@ export default function App() {
             // on any more, so stop holding the loading screen up.
             clearSession();
             st.setConnection("SERVER_GONE");
-            st.setScreen("NAME");
+            st.setScreen("HOME");
           });
       },
       onDisconnect: () => useGame.getState().setConnection("RECONNECTING"),
@@ -156,28 +166,31 @@ export default function App() {
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
           {screen === "LOADING" && <LoadingScreen />}
+          {screen === "HOME" && <GamesHub />}
+          {screen === "LITERATURE_ROOM" && <LiteratureRoomScreen />}
           {screen === "NAME" && <NameScreen />}
-          {screen === "HOME" && <HomeScreen />}
           {screen === "LOBBY" && <LobbyScreen />}
         </div>
       )}
 
       {/* Rendered once here, not per-screen, so chat/voice survive the lobby-to-game transition (§28, §69). */}
-      {room && me && (
+      {room && myId && (
         <>
-          <ChatDock chat={chat} myPlayerId={me.id} />
+          <ChatDock chat={chat} myPlayerId={myId} />
           <VoiceDock
             voice={voice}
             available={room.voice.available}
             participants={voiceParticipants}
             players={room.players}
-            myPlayerId={me.id}
+            spectators={room.spectators}
+            myPlayerId={myId}
           />
         </>
       )}
 
       {confirmLeave && (
         <ConfirmLeaveModal
+          isSpectator={isSpectator}
           onCancel={() => setConfirmLeave(false)}
           onLeave={() => {
             setConfirmLeave(false);
@@ -202,7 +215,15 @@ function LoadingScreen() {
   );
 }
 
-function ConfirmLeaveModal({ onCancel, onLeave }: { onCancel: () => void; onLeave: () => void }) {
+function ConfirmLeaveModal({
+  isSpectator,
+  onCancel,
+  onLeave,
+}: {
+  isSpectator?: boolean;
+  onCancel: () => void;
+  onLeave: () => void;
+}) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6"
@@ -214,8 +235,9 @@ function ConfirmLeaveModal({ onCancel, onLeave }: { onCancel: () => void; onLeav
       <div className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)] p-5">
         <h2 className="text-lg font-bold">Leave room?</h2>
         <p className="mt-1.5 text-sm text-[var(--text-muted)]">
-          That back tap would take you out of the room. You'll lose your seat and, if a game is
-          running, your team plays on without you.
+          {isSpectator
+            ? "You are currently spectating. Leaving will disconnect you from the room."
+            : "That back tap would take you out of the room. You'll lose your seat and, if a game is running, your team plays on without you."}
         </p>
         <div className="mt-5 flex gap-3">
           <button

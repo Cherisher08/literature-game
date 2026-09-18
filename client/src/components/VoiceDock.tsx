@@ -10,7 +10,7 @@
  */
 
 import { Loader2, Mic, MicOff, PhoneOff, Volume2 } from "lucide-react";
-import type { PublicPlayer } from "@memory-game/shared";
+import type { PublicPlayer, PublicSpectator } from "@memory-game/shared";
 import type { VoiceApi } from "../voice/useVoice.js";
 
 export interface VoiceDockProps {
@@ -18,6 +18,7 @@ export interface VoiceDockProps {
   available: boolean;
   participants: string[];
   players: PublicPlayer[];
+  spectators?: PublicSpectator[];
   myPlayerId: string;
 }
 
@@ -26,6 +27,7 @@ export function VoiceDock({
   available,
   participants,
   players,
+  spectators,
   myPlayerId,
 }: VoiceDockProps) {
   // §71.4's principle applies here too: a control that silently vanishes is
@@ -69,7 +71,10 @@ export function VoiceDock({
         <div className="flex max-w-[min(78vw,260px)] flex-wrap justify-end gap-1">
           {others.map((id) => {
             const p = players.find((x) => x.id === id);
-            if (!p) return null;
+            const s = spectators?.find((x) => x.id === id);
+            const user = p || s;
+            if (!user) return null;
+            const isSpec = Boolean(!p && s);
             const talking = voice.speaking.includes(id);
             return (
               <span
@@ -82,7 +87,8 @@ export function VoiceDock({
                 }}
               >
                 <Volume2 size={10} style={{ opacity: talking ? 1 : 0.4 }} />
-                {p.name}
+                {user.name}
+                {isSpec && <span className="text-[9px] text-[var(--accent)] font-semibold">(Spec)</span>}
               </span>
             );
           })}

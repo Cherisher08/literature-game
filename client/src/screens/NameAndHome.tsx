@@ -5,7 +5,7 @@
  */
 
 import { useState } from "react";
-import { LogIn, Plus, Spade } from "lucide-react";
+import { ArrowLeft, Eye, LogIn, Plus, Spade } from "lucide-react";
 import {
   DEFAULT_PLAYER_COUNT,
   MAX_NAME_LENGTH,
@@ -35,6 +35,13 @@ export function NameScreen() {
 
   return (
     <Shell>
+      <button
+        onClick={() => setScreen("HOME")}
+        className="mb-4 flex items-center gap-1.5 self-start rounded-xl px-2.5 py-1.5 text-xs font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text)] transition-colors"
+      >
+        <ArrowLeft size={16} /> Back to Games
+      </button>
+
       <h1 className="mb-1 text-2xl font-bold">Literature</h1>
       <p className="mb-8 text-sm text-[var(--text-muted)]">
         {INITIAL_ROOM_CODE
@@ -51,7 +58,7 @@ export function NameScreen() {
           // A room link (e.g. /TN47RQ) should drop you straight into the room, not
           // hand you back to the create/join form once you've already typed the code.
           if (!INITIAL_ROOM_CODE) {
-            setScreen("HOME");
+            setScreen("LITERATURE_ROOM");
             return;
           }
 
@@ -61,7 +68,7 @@ export function NameScreen() {
           setBusy(false);
           if (!("ok" in res) || !res.ok) {
             setError(describe(res));
-            setScreen("HOME");
+            setScreen("LITERATURE_ROOM");
             return;
           }
           setIdentity(res.data.playerId);
@@ -100,8 +107,9 @@ export function NameScreen() {
   );
 }
 
-export function HomeScreen() {
+export function LiteratureRoomScreen() {
   const name = useGame((s) => s.name);
+  const setScreen = useGame((s) => s.setScreen);
   const setIdentity = useGame((s) => s.setIdentity);
   const applyState = useGame((s) => s.applyState);
   const setError = useGame((s) => s.setError);
@@ -110,6 +118,7 @@ export function HomeScreen() {
   // A room link opened cold and not resolved by an auto-reconnect still names the room
   // the visitor meant to reach — pre-fill the join code instead of making them retype it.
   const [code, setCode] = useState(INITIAL_ROOM_CODE ?? "");
+  const [spectateOnly, setSpectateOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [playerCount, setPlayerCount] = useState<PlayerCount>(DEFAULT_PLAYER_COUNT);
 
@@ -130,7 +139,7 @@ export function HomeScreen() {
   async function join() {
     setBusy(true);
     setError(null);
-    const res = await api.joinRoom(code.trim().toUpperCase(), name, PROTOCOL_VERSION);
+    const res = await api.joinRoom(code.trim().toUpperCase(), name, PROTOCOL_VERSION, undefined, spectateOnly);
     setBusy(false);
     if (!("ok" in res) || !res.ok) {
       setError(describe(res));
@@ -143,6 +152,13 @@ export function HomeScreen() {
 
   return (
     <Shell>
+      <button
+        onClick={() => setScreen("HOME")}
+        className="mb-4 flex items-center gap-1.5 self-start rounded-xl px-2.5 py-1.5 text-xs font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text)] transition-colors"
+      >
+        <ArrowLeft size={16} /> Back to Games
+      </button>
+
       <div className="mb-6 flex items-center gap-2 text-[var(--accent)]">
         <Spade size={22} />
         <h1 className="text-xl font-bold">Hello, {name}</h1>
@@ -210,8 +226,21 @@ export function HomeScreen() {
           aria-label="Room code"
           className="mb-3 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-center font-mono text-2xl tracking-[0.3em] outline-none focus:border-[var(--accent)]"
         />
+
+        <label className="mb-3 flex items-center justify-center gap-2 cursor-pointer text-xs text-[var(--text-muted)] select-none hover:text-[var(--text)]">
+          <input
+            type="checkbox"
+            checked={spectateOnly}
+            onChange={(e) => setSpectateOnly(e.target.checked)}
+            className="rounded border-[var(--border)] bg-[var(--surface)] text-[var(--accent)] accent-[var(--accent)]"
+          />
+          <span className="flex items-center gap-1">
+            <Eye size={13} /> Join as spectator only
+          </span>
+        </label>
+
         <SecondaryButton disabled={busy || code.trim().length !== ROOM_CODE_LENGTH}>
-          <LogIn size={18} /> Join room
+          <LogIn size={18} /> {spectateOnly ? "Spectate room" : "Join room"}
         </SecondaryButton>
       </form>
 
@@ -223,6 +252,8 @@ export function HomeScreen() {
     </Shell>
   );
 }
+
+export const HomeScreen = LiteratureRoomScreen;
 
 // ---------------------------------------------------------------------------
 

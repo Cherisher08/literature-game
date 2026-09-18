@@ -280,4 +280,43 @@ describe("full game over the wire", () => {
     expect(msg.message).toBe("hello team");
     expect(msg.playerName).toBe("Alice");
   });
+
+  it("admits a spectator who receives state and can chat", async () => {
+    const host = await connect();
+    const created = await emit<Ack<JoinResult>>(host, "room:create", {
+      protocolVersion: PROTOCOL_VERSION,
+      name: "Host",
+      playerCount: 4,
+    });
+    if (!created.ok) throw new Error("create failed");
+
+    const spectatorSock = await connect();
+    const joinRes = await emit<Ack<JoinResult>>(spectatorSock, "room:join", {
+      protocolVersion: PROTOCOL_VERSION,
+      roomId: created.data.roomId,
+      name: "SpectatorSam",
+      spectateOnly: true,
+    });
+
+    expect(joinRes.ok).toBe(true);
+    if (!joinRes.ok) return;
+    expect(joinRes.data.isSpectator).toBe(true);
+    expect(joinRes.data.state.spectators).toHaveLength(1);
+    expect(joinRes.data.state.spectators[0].name).toBe("SpectatorSam");
+
+    // Test that spectator can send chat messages
+    const hostReceived = new Promise<{ message: string; playerName: string }>((resolve) =>
+      host.once("chat:message", resolve),
+    );
+
+    const chatRes = await emit<VoidAck>(spectatorSock, "chat:send", {
+      actionId: actionId(),
+      payload: { message: "Cheering for Team A!" },
+    });
+    expect(chatRes.ok).toBe(true);
+
+    const msg = await hostReceived;
+    expect(msg.message).toBe("Cheering for Team A!");
+    expect(msg.playerName).toBe("SpectatorSam");
+  });
 });

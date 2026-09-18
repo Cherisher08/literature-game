@@ -66,6 +66,10 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
       if (!player.socketId) continue;
       io.to(player.socketId).emit("room:state", projectRoomFor(room, player.id));
     }
+    for (const spectator of room.spectators) {
+      if (!spectator.socketId) continue;
+      io.to(spectator.socketId).emit("room:state", projectRoomFor(room, spectator.id));
+    }
   }
 
   // Once a move ends the game, the whole room returns to the lobby together
@@ -181,11 +185,11 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
       // §35: a token resumes an existing seat, including mid-game.
       const result = input.sessionToken
         ? rooms.reconnect(input.roomId, input.sessionToken, socket.id)
-        : rooms.joinRoom(input.roomId, input.name, socket.id);
+        : rooms.joinRoom(input.roomId, input.name, socket.id, { spectateOnly: input.spectateOnly });
 
       if ("error" in result) return ack(deny(result.error));
 
-      const { room, player } = result;
+      const { room, player, isSpectator } = result;
       socket.data.roomId = room.id;
       socket.data.playerId = player.id;
       void socket.join(room.id);
@@ -197,13 +201,14 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
           playerId: player.id,
           sessionToken: player.sessionToken,
           state: projectRoomFor(room, player.id),
+          isSpectator,
         },
       });
 
-      socket.to(room.id).emit(
-        "room:player-joined",
-        projectRoomFor(room, player.id).players.find((p) => p.id === player.id)!,
-      );
+      if (!isSpectator) {
+        const publicPlayer = projectRoomFor(room, player.id).players.find((p) => p.id === player.id);
+        if (publicPlayer) socket.to(room.id).emit("room:player-joined", publicPlayer);
+      }
       broadcastState(room);
     });
 
@@ -458,7 +463,9 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
       const playerId = socket.data.playerId;
       if (!room || !playerId) return ack(deny("ROOM_NOT_FOUND"));
 
-      const player = room.players.find((p) => p.id === playerId);
+      const player =
+        room.players.find((p) => p.id === playerId) ??
+        room.spectators.find((s) => s.id === playerId);
       if (!player) return ack(deny("ROOM_NOT_FOUND"));
 
       // §30: the token admits this player to this room's channel and no other.
@@ -493,7 +500,9 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
       const playerId = socket.data.playerId;
       if (!room || !playerId) return ack(deny("ROOM_NOT_FOUND"));
 
-      const player = room.players.find((p) => p.id === playerId);
+      const player =
+        room.players.find((p) => p.id === playerId) ??
+        room.spectators.find((s) => s.id === playerId);
       if (!player) return ack(deny("ROOM_NOT_FOUND"));
 
       const message = rooms.addChatMessage(room, player.id, player.name, input.payload.message);

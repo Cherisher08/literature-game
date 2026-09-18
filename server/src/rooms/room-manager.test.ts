@@ -26,7 +26,7 @@ describe("room codes (§58)", () => {
 });
 
 describe("join and capacity (§58)", () => {
-  it("seats players 1..6 and rejects the seventh", () => {
+  it("seats players 1..6 and admits the seventh as a spectator", () => {
     const m = mgr();
     const { room } = m.createRoom("Host", "s0");
     for (let i = 1; i < PLAYER_COUNT; i++) {
@@ -36,18 +36,61 @@ describe("join and capacity (§58)", () => {
     expect(room.players.map((p) => p.seatPosition)).toEqual([1, 2, 3, 4, 5, 6]);
 
     const seventh = m.joinRoom(room.id, "P6", "s6");
-    expect(seventh).toEqual({ error: "ROOM_FULL" });
+    expect("error" in seventh).toBe(false);
+    if (!("error" in seventh)) {
+      expect(seventh.isSpectator).toBe(true);
+      expect(seventh.player.name).toBe("P6");
+      expect(room.spectators).toHaveLength(1);
+    }
+
+    const rejected = m.joinRoom(room.id, "P7", "s7", { allowSpectate: false });
+    expect(rejected).toEqual({ error: "ROOM_FULL" });
   });
 
   it("rejects joining an unknown room", () => {
     expect(mgr().joinRoom("ZZZZZZ", "P", "s")).toEqual({ error: "ROOM_NOT_FOUND" });
   });
 
-  it("rejects joining once the game has started", () => {
+  it("admits joining as spectator once the game has started", () => {
     const m = mgr();
     const { room } = m.createRoom("Host", "s0");
     room.status = "PLAYING";
-    expect(m.joinRoom(room.id, "P", "s1")).toEqual({ error: "GAME_ALREADY_STARTED" });
+    const res = m.joinRoom(room.id, "P", "s1");
+    expect("error" in res).toBe(false);
+    if (!("error" in res)) {
+      expect(res.isSpectator).toBe(true);
+      expect(room.spectators).toHaveLength(1);
+    }
+
+    const rejected = m.joinRoom(room.id, "P2", "s2", { allowSpectate: false });
+    expect(rejected).toEqual({ error: "GAME_ALREADY_STARTED" });
+  });
+
+  it("allows explicit spectateOnly joins even before room is full", () => {
+    const m = mgr();
+    const { room } = m.createRoom("Host", "s0");
+    const res = m.joinRoom(room.id, "Watcher", "sw", { spectateOnly: true });
+    expect("error" in res).toBe(false);
+    if (!("error" in res)) {
+      expect(res.isSpectator).toBe(true);
+      expect(room.players).toHaveLength(1);
+      expect(room.spectators).toHaveLength(1);
+    }
+  });
+
+  it("reconnects spectators by session token", () => {
+    const m = mgr();
+    const { room } = m.createRoom("Host", "s0");
+    const res = m.joinRoom(room.id, "Watcher", "sw", { spectateOnly: true });
+    if ("error" in res) throw new Error("failed");
+
+    const re = m.reconnect(room.id, res.player.sessionToken, "sw2");
+    expect("error" in re).toBe(false);
+    if (!("error" in re)) {
+      expect(re.isSpectator).toBe(true);
+      expect(re.player.socketId).toBe("sw2");
+      expect(re.player.connected).toBe(true);
+    }
   });
 
   it("gives every player a distinct session token", () => {
