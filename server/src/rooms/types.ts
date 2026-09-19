@@ -10,10 +10,12 @@ import type {
   BotDifficulty,
   ChatMessage,
   GameState,
+  GameType,
   PlayerCount,
   RoomStatus,
   TeamId,
 } from "@memory-game/shared";
+import type { InternalPokerState } from "../poker/engine.js";
 
 export interface RoomPlayer {
   id: string;
@@ -40,10 +42,13 @@ export interface GameRoom {
   status: RoomStatus;
   /** §72: chosen at creation. Join capacity, deck and teams all follow it. */
   playerCount: PlayerCount;
+  gameType?: GameType;
   players: RoomPlayer[];
   spectators: RoomPlayer[];
   /** Present once the game starts. Owned by the engine (§57). */
   game?: GameState;
+  /** Present when gameType === "POKER". */
+  poker?: InternalPokerState;
   chatMessages: ChatMessage[];
   createdAt: number;
   lastActivityAt: number;

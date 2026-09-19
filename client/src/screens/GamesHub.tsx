@@ -67,13 +67,14 @@ const GAMES: GameEntry[] = [
     description:
       "Two hole cards. Five community cards. Blinds, raises, and all-ins. Play Texas Hold'em with up to 9 players — bet, bluff, and read the table to claim the pot.",
     playerRange: "2 – 9 Players",
-    status: "COMING_SOON",
+    status: "ACTIVE",
     icon: Diamond,
     accentColor: "var(--card-red)",
     highlights: [
       { icon: Users, label: "2 to 9 Players" },
-      { icon: Sparkles, label: "Blinds & All-ins" },
-      { icon: Eye, label: "Spectate & Replays" },
+      { icon: Sparkles, label: "Blinds, Raises & All-ins" },
+      { icon: Mic, label: "Live Voice Chat" },
+      { icon: Bot, label: "AI Bots" },
     ],
   },
   {
@@ -134,7 +135,7 @@ export function GamesHub() {
   }
 
   function handlePlayGame(gameId: string) {
-    if (gameId !== "literature") return;
+    if (gameId !== "literature" && gameId !== "poker") return;
 
     if (!name.trim()) {
       setEditingName(true);
@@ -142,7 +143,11 @@ export function GamesHub() {
       return;
     }
 
-    setScreen("LITERATURE_ROOM");
+    if (gameId === "poker") {
+      setScreen("POKER_ROOM");
+    } else {
+      setScreen("LITERATURE_ROOM");
+    }
   }
 
   return (
@@ -340,8 +345,9 @@ export function GamesHub() {
                       <button
                         onClick={() => handlePlayGame(g.id)}
                         className="group flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] px-5 py-3.5 text-sm font-bold text-[#2a1e02] shadow-md transition-transform hover:brightness-105 active:scale-[0.98]"
+                        style={g.id === "poker" ? { background: "var(--card-red)", color: "white" } : {}}
                       >
-                        Play Literature
+                        Play {g.title}
                         <ArrowRight
                           size={16}
                           className="transition-transform group-hover:translate-x-1"

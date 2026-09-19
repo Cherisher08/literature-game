@@ -96,7 +96,7 @@ describe("socket protocol (§27, §59)", () => {
     const res = await emit<Ack<JoinResult>>(s, "room:create", {
       protocolVersion: PROTOCOL_VERSION,
       name: "Bob",
-      playerCount: 5,
+      playerCount: 1, // below min of 2
     });
     expect(res.ok).toBe(false);
   });

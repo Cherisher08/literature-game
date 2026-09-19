@@ -10,6 +10,7 @@ import { randomInt } from "node:crypto";
 import type { Server, Socket } from "socket.io";
 import {
   ERROR_MESSAGE,
+  DEFAULT_POKER_CONFIG,
   type AckFailure,
   type ClientToServerEvents,
   type ErrorCode,
@@ -26,6 +27,8 @@ import type { RoomManager } from "../rooms/room-manager.js";
 import type { GameRoom } from "../rooms/types.js";
 import { BotRunner } from "../bots/runner.js";
 import { isVoiceConfigured, mintVoiceToken } from "../voice/livekit.js";
+import { createInitialPokerState, handlePokerAction, startNewPokerHand } from "../poker/engine.js";
+import { decidePokerBotAction } from "../poker/bots.js";
 import { RateLimiter, dedupeGet, dedupeSet } from "./rate-limit.js";
 import {
   askCardSchema,
@@ -35,6 +38,7 @@ import {
   emptyEnvelopeSchema,
   addBotSchema,
   joinRoomSchema,
+  pokerActionSchema,
   parse,
   removeBotSchema,
   kickPlayerSchema,
@@ -114,6 +118,39 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
     broadcastState(room);
   });
 
+  function schedulePokerBotIfNeeded(room: GameRoom) {
+    if (!room.poker || room.poker.status !== "PLAYING" || room.poker.activeSeat === null) return;
+    const activePlayer = room.poker.players[room.poker.activeSeat];
+    if (!activePlayer || !activePlayer.isBot) return;
+
+    setTimeout(() => {
+      if (!room.poker || room.poker.status !== "PLAYING" || room.poker.activeSeat === null) return;
+      const currentActive = room.poker.players[room.poker.activeSeat];
+      if (!currentActive || !currentActive.isBot || currentActive.id !== activePlayer.id) return;
+
+      const botAction = decidePokerBotAction(room.poker, currentActive);
+      const res = handlePokerAction(room.poker, currentActive.id, botAction);
+      if (res.ok) {
+        broadcastState(room);
+        if (room.poker.round === "HAND_OVER") {
+          schedulePokerNextHand(room);
+        } else {
+          schedulePokerBotIfNeeded(room);
+        }
+      }
+    }, 750);
+  }
+
+  function schedulePokerNextHand(room: GameRoom) {
+    setTimeout(() => {
+      if (!room.poker || room.poker.status !== "PLAYING") return;
+      if (room.poker.round !== "HAND_OVER") return;
+      startNewPokerHand(room.poker);
+      broadcastState(room);
+      schedulePokerBotIfNeeded(room);
+    }, 4500);
+  }
+
   function currentRoom(socket: GameSocket): GameRoom | undefined {
     const { roomId } = socket.data;
     return roomId ? rooms.get(roomId) : undefined;
@@ -161,7 +198,12 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
       const input = parse(createRoomSchema, raw);
       if (!input) return ack(deny("INVALID_SESSION"));
 
-      const { room, player } = rooms.createRoom(input.name, socket.id, input.playerCount);
+      const { room, player } = rooms.createRoom(
+        input.name,
+        socket.id,
+        input.playerCount,
+        input.gameType ?? "LITERATURE",
+      );
       socket.data.roomId = room.id;
       socket.data.playerId = player.id;
       void socket.join(room.id);
@@ -487,6 +529,85 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
         broadcastEvents(room, result.events);
         return { ok: true };
       });
+    });
+
+    // -----------------------------------------------------------------------
+    // Poker gameplay
+    // -----------------------------------------------------------------------
+
+    socket.on("poker:start", (ack) => {
+      const room = currentRoom(socket);
+      const playerId = socket.data.playerId;
+      if (!room || !playerId) return ack(deny("ROOM_NOT_FOUND"));
+      if (room.hostId !== playerId) return ack(deny("NOT_HOST"));
+      if (room.status !== "LOBBY") return ack(deny("GAME_ALREADY_STARTED"));
+      if (room.players.length < 2) return ack(deny("ROOM_FULL"));
+
+      room.status = "PLAYING";
+      room.poker = createInitialPokerState(
+        room.players.map((p) => ({
+          id: p.id,
+          name: p.name,
+          isBot: Boolean(p.bot),
+        })),
+        DEFAULT_POKER_CONFIG,
+      );
+      startNewPokerHand(room.poker);
+      rooms.touch(room);
+      broadcastState(room);
+      schedulePokerBotIfNeeded(room);
+      ack({ ok: true });
+    });
+
+    socket.on("poker:action", (raw, ack) => {
+      const input = parse(pokerActionSchema, raw);
+      if (!input) return ack(deny("ILLEGAL_ACTION"));
+
+      withEnvelope(socket, input.actionId, ack, (room, playerId) => {
+        if (!room.poker || room.status !== "PLAYING") return deny("NOT_IN_LOBBY");
+        const res = handlePokerAction(room.poker, playerId, input.payload);
+        if (!res.ok) return deny("ILLEGAL_ACTION");
+
+        rooms.touch(room);
+        broadcastState(room);
+
+        if (room.poker.round === "HAND_OVER") {
+          schedulePokerNextHand(room);
+        } else {
+          schedulePokerBotIfNeeded(room);
+        }
+
+        return { ok: true };
+      });
+    });
+
+    socket.on("poker:add-bot", (ack) => {
+      const room = currentRoom(socket);
+      const playerId = socket.data.playerId;
+      if (!room || !playerId) return ack(deny("ROOM_NOT_FOUND"));
+      if (room.hostId !== playerId) return ack(deny("NOT_HOST"));
+      if (room.status !== "LOBBY") return ack(deny("NOT_IN_LOBBY"));
+      if (room.players.length >= room.playerCount) return ack(deny("ROOM_FULL"));
+
+      const result = rooms.addBot(room.id, "MEDIUM");
+      if ("error" in result) return ack(deny(result.error));
+
+      broadcastState(result.room);
+      ack({ ok: true });
+    });
+
+    socket.on("poker:next-hand", (ack) => {
+      const room = currentRoom(socket);
+      const playerId = socket.data.playerId;
+      if (!room || !playerId) return ack(deny("ROOM_NOT_FOUND"));
+      if (room.hostId !== playerId) return ack(deny("NOT_HOST"));
+      if (!room.poker || room.poker.round !== "HAND_OVER") return ack(deny("NOT_IN_LOBBY"));
+
+      startNewPokerHand(room.poker);
+      rooms.touch(room);
+      broadcastState(room);
+      schedulePokerBotIfNeeded(room);
+      ack({ ok: true });
     });
 
     // -----------------------------------------------------------------------

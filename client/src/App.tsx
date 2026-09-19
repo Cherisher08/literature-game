@@ -8,6 +8,8 @@ import { GamesHub } from "./screens/GamesHub.js";
 import { LiteratureRoomScreen, NameScreen } from "./screens/NameAndHome.js";
 import { LobbyScreen } from "./screens/Lobby.js";
 import { GameScreen } from "./screens/Game.js";
+import { PokerRoomScreen } from "./screens/PokerRoomScreen.js";
+import { PokerGame } from "./screens/PokerGame.js";
 import { ChatDock } from "./components/ChatDock.js";
 import { VoiceDock } from "./components/VoiceDock.js";
 import { useVoice } from "./voice/useVoice.js";
@@ -26,11 +28,15 @@ function useRouteSync(onBackPastRoom: () => void) {
   const target =
     screen === "GAME" && roomId
       ? `/${roomId}`
-      : screen === "LOBBY" && roomId
-        ? "/lobby"
-        : screen === "LITERATURE_ROOM"
-          ? "/literature"
-          : "/home";
+      : screen === "POKER_GAME" && roomId
+        ? `/poker/${roomId}`
+        : screen === "LOBBY" && roomId
+          ? "/lobby"
+          : screen === "LITERATURE_ROOM"
+            ? "/literature"
+            : screen === "POKER_ROOM"
+              ? "/poker"
+              : "/home";
 
   // Forward: app state moved on (joined, started, left) — push the URL to match.
   useEffect(() => {
@@ -182,6 +188,10 @@ export default function App() {
         <div className="min-h-0 flex-1 overflow-hidden">
           <GameScreen />
         </div>
+      ) : screen === "POKER_GAME" ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <PokerGame />
+        </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
           {screen === "LOADING" && <LoadingScreen />}
@@ -189,6 +199,7 @@ export default function App() {
           {screen === "LITERATURE_ROOM" && <LiteratureRoomScreen />}
           {screen === "NAME" && <NameScreen />}
           {screen === "LOBBY" && <LobbyScreen />}
+          {screen === "POKER_ROOM" && <PokerRoomScreen />}
         </div>
       )}
 

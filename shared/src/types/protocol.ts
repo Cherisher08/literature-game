@@ -20,6 +20,9 @@ import type {
   Turn,
 } from "./game.js";
 import type { ErrorCode } from "./errors.js";
+import type { ClientPokerState, PokerAction } from "./poker.js";
+
+export type GameType = "LITERATURE" | "POKER";
 
 // ---------------------------------------------------------------------------
 // Projections (§53)
@@ -82,8 +85,11 @@ export interface ClientRoomState {
   voice: VoiceState;
   players: PublicPlayer[];
   spectators: PublicSpectator[];
+  gameType?: GameType;
   /** Present only once the game has started. */
   game?: ClientGameState;
+  /** Present when gameType === "POKER". */
+  poker?: ClientPokerState;
   /** §68.6: monotonic per room; a gap means resync. */
   seq: number;
 }
@@ -142,8 +148,9 @@ export interface JoinRoomPayload {
 export interface CreateRoomPayload {
   protocolVersion: number;
   name: string;
-  /** §72: 4, 6 or 8. */
+  /** §72: 4, 6 or 8 for literature, 2-9 for poker. */
   playerCount: number;
+  gameType?: GameType;
 }
 
 export interface AskCardPayload {
@@ -229,6 +236,10 @@ export interface ClientToServerEvents {
   "game:declaration-cancel": (e: ActionEnvelope<Record<string, never>>, ack: (r: VoidAck) => void) => void;
   "game:declare-set": (e: ActionEnvelope<DeclarePayload>, ack: (r: VoidAck) => void) => void;
   "chat:send": (e: ActionEnvelope<ChatSendPayload>, ack: (r: VoidAck) => void) => void;
+  "poker:action": (e: ActionEnvelope<PokerAction>, ack: (r: VoidAck) => void) => void;
+  "poker:start": (ack: (r: VoidAck) => void) => void;
+  "poker:add-bot": (ack: (r: VoidAck) => void) => void;
+  "poker:next-hand": (ack: (r: VoidAck) => void) => void;
 }
 
 export interface ServerToClientEvents {

@@ -16,7 +16,7 @@ import {
   type TeamId,
 } from "@memory-game/shared";
 
-export type Screen = "LOADING" | "HOME" | "LITERATURE_ROOM" | "NAME" | "LOBBY" | "GAME";
+export type Screen = "LOADING" | "HOME" | "LITERATURE_ROOM" | "NAME" | "LOBBY" | "GAME" | "POKER_ROOM" | "POKER_GAME";
 export type ConnectionState = "CONNECTING" | "CONNECTED" | "RECONNECTING" | "SERVER_GONE";
 
 const SESSION_KEY = "literature.session";
@@ -164,7 +164,12 @@ export const useGame = create<GameStore>((set, get) => ({
       room,
       lastSeq: room.seq,
       hydrating: opts?.hydrating ?? false,
-      screen: room.status === "LOBBY" ? "LOBBY" : "GAME",
+      screen:
+        room.status === "LOBBY"
+          ? "LOBBY"
+          : room.gameType === "POKER"
+            ? "POKER_GAME"
+            : "GAME",
       // Back in the lobby means the last game is done — clear its leftovers so
       // they can't flash back up if this player's next game ends the same way.
       ...(room.status === "LOBBY" ? { gameOver: null, reveal: null } : {}),

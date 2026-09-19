@@ -16,6 +16,7 @@ import type {
   PublicPlayer,
 } from "@memory-game/shared";
 import { isVoiceConfigured } from "../voice/livekit.js";
+import { projectPokerState } from "../poker/engine.js";
 import type { GameRoom } from "./types.js";
 
 /** Public view of a lobby player, before any game exists. */
@@ -104,7 +105,9 @@ export function projectRoomFor(room: GameRoom, playerId: string): ClientRoomStat
       name: s.name,
       connected: s.connected,
     })),
+    gameType: room.gameType ?? "LITERATURE",
     ...(room.game ? { game: projectGameFor(room, room.game, playerId) } : {}),
+    ...(room.poker ? { poker: projectPokerState(room.poker, playerId) } : {}),
     seq: room.seq,
   };
 }

@@ -21,6 +21,7 @@ import {
   type PlayerCount,
   type ErrorCode,
   type TeamId,
+  type GameType,
 } from "@memory-game/shared";
 import type { GameRoom, RoomPlayer, RoomRuntime } from "./types.js";
 
@@ -104,7 +105,8 @@ export class RoomManager {
   createRoom(
     hostName: string,
     socketId: string,
-    playerCount: PlayerCount = DEFAULT_PLAYER_COUNT,
+    playerCount: number = DEFAULT_PLAYER_COUNT,
+    gameType: GameType = "LITERATURE",
   ): { room: GameRoom; player: RoomPlayer } {
     const id = this.generateRoomCode();
     const now = Date.now();
@@ -122,7 +124,8 @@ export class RoomManager {
       id,
       hostId: player.id,
       status: "LOBBY",
-      playerCount,
+      playerCount: playerCount as PlayerCount,
+      gameType,
       players: [player],
       spectators: [],
       chatMessages: [],

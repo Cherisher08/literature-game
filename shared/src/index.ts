@@ -2,4 +2,8 @@ export * from "./types/cards.js";
 export * from "./types/game.js";
 export * from "./types/errors.js";
 export * from "./types/protocol.js";
+export * from "./types/poker.js";
+export * from "./poker/deck.js";
+export * from "./poker/evaluator.js";
+export * from "./poker/sidepots.js";
 export * from "./constants.js";

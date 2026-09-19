@@ -13,8 +13,10 @@ import type {
   ClientRoomState,
   ClientToServerEvents,
   ChatMessage,
+  GameType,
   GameEvent,
   JoinResult,
+  PokerAction,
   ServerToClientEvents,
   VoiceCredentials,
   VoidAck,
@@ -68,11 +70,12 @@ export function request<E extends keyof ClientToServerEvents, R>(
 // ---------------------------------------------------------------------------
 
 export const api = {
-  createRoom: (name: string, protocolVersion: number, playerCount: number) =>
+  createRoom: (name: string, protocolVersion: number, playerCount: number, gameType?: GameType) =>
     request<"room:create", Ack<JoinResult>>("room:create", {
       protocolVersion,
       name,
       playerCount,
+      ...(gameType ? { gameType } : {}),
     }),
 
   joinRoom: (
@@ -148,6 +151,22 @@ export const api = {
   /** Host-only: kick a player (human or bot) from the lobby. */
   kickPlayer: (playerId: string) =>
     request<"room:kick-player", VoidAck>("room:kick-player", { playerId }),
+
+  // ---------------------------------------------------------------------------
+  // Poker actions
+  // ---------------------------------------------------------------------------
+
+  pokerStart: () => request<"poker:start", VoidAck>("poker:start"),
+
+  pokerAction: (action: PokerAction) =>
+    request<"poker:action", VoidAck>("poker:action", {
+      actionId: newActionId(),
+      payload: action,
+    }),
+
+  pokerAddBot: () => request<"poker:add-bot", VoidAck>("poker:add-bot"),
+
+  pokerNextHand: () => request<"poker:next-hand", VoidAck>("poker:next-hand"),
 
   voiceToken: () => request<"voice:token", Ack<VoiceCredentials>>("voice:token"),
 

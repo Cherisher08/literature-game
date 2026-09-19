@@ -62,14 +62,17 @@ export const envelope = <T extends z.ZodTypeAny>(payload: T) =>
 export const createRoomSchema = z.object({
   protocolVersion: z.literal(PROTOCOL_VERSION),
   name: nameSchema,
-  // §72: only 4, 6 or 8 divide their decks evenly into two equal teams.
-  playerCount: z
-    .number()
-    .int()
-    .refine((n): n is (typeof PLAYER_COUNTS)[number] =>
-      (PLAYER_COUNTS as readonly number[]).includes(n),
-    ),
+  // 4, 6 or 8 for literature, 2-9 for poker
+  playerCount: z.number().int().min(2).max(9),
+  gameType: z.enum(["LITERATURE", "POKER"]).optional(),
 });
+
+export const pokerActionSchema = envelope(
+  z.object({
+    type: z.enum(["FOLD", "CHECK", "CALL", "BET", "RAISE", "ALL_IN"]),
+    amount: z.number().int().positive().optional(),
+  }),
+);
 
 export const joinRoomSchema = z.object({
   protocolVersion: z.literal(PROTOCOL_VERSION),
