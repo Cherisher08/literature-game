@@ -277,38 +277,45 @@ function TablePanel({
   maxCards: number;
 }) {
   const myTeam = me?.teamId ?? null;
-  const opponents = game.players.filter((p) => p.teamId !== myTeam);
-  const teammates = game.players.filter((p) => p.teamId === myTeam);
+  const opponents = myTeam !== null ? game.players.filter((p) => p.teamId !== myTeam) : [];
+  const teammates = myTeam !== null ? game.players.filter((p) => p.teamId === myTeam) : [];
+
+  const team1 = myTeam === null ? game.players.filter((p) => p.teamId === "A") : [];
+  const team2 = myTeam === null ? game.players.filter((p) => p.teamId === "B") : [];
+
+  const renderPlayer = (p: typeof game.players[0]) => (
+    <PlayerCard
+      key={p.id}
+      player={p}
+      myTeam={myTeam}
+      isHost={p.id === room.hostId}
+      isMe={p.id === me?.id}
+      active={isActive(game, p.id)}
+      maxCards={maxCards}
+    />
+  );
 
   return (
     <div className="space-y-5">
-      <Group title="Opponents" tone="them">
-        {opponents.map((p) => (
-          <PlayerCard
-            key={p.id}
-            player={p}
-            myTeam={myTeam}
-            isHost={p.id === room.hostId}
-            isMe={p.id === me?.id}
-            active={isActive(game, p.id)}
-            maxCards={maxCards}
-          />
-        ))}
-      </Group>
-
-      <Group title="Your team" tone="us">
-        {teammates.map((p) => (
-          <PlayerCard
-            key={p.id}
-            player={p}
-            myTeam={myTeam}
-            isHost={p.id === room.hostId}
-            isMe={p.id === me?.id}
-            active={isActive(game, p.id)}
-            maxCards={maxCards}
-          />
-        ))}
-      </Group>
+      {myTeam !== null ? (
+        <>
+          <Group title="Opponents" tone="them">
+            {opponents.map(renderPlayer)}
+          </Group>
+          <Group title="Your team" tone="us">
+            {teammates.map(renderPlayer)}
+          </Group>
+        </>
+      ) : (
+        <>
+          <Group title="Team A" tone="us">
+            {team1.map(renderPlayer)}
+          </Group>
+          <Group title="Team B" tone="them">
+            {team2.map(renderPlayer)}
+          </Group>
+        </>
+      )}
 
       <section>
         <div className="mb-2 flex items-center gap-2">
