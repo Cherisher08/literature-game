@@ -18,6 +18,7 @@ import {
   LogIn,
   Play,
   Repeat2,
+  UserX,
   Users,
   X,
 } from "lucide-react";
@@ -100,6 +101,12 @@ export function LobbyScreen() {
   async function removeBot(playerId: string) {
     setError(null);
     const res = await api.removeBot(playerId);
+    if (!("ok" in res) || !res.ok) setError(describe(res));
+  }
+
+  async function kickPlayer(playerId: string) {
+    setError(null);
+    const res = await api.kickPlayer(playerId);
     if (!("ok" in res) || !res.ok) setError(describe(res));
   }
 
@@ -242,6 +249,9 @@ export function LobbyScreen() {
                       {...(isHost && p.isBot
                         ? { onRemove: () => void removeBot(p.id) }
                         : {})}
+                      {...(isHost && p.id !== me?.id
+                        ? { onKick: () => void kickPlayer(p.id) }
+                        : {})}
                     />
                   ))}
                   {members.length === 0 && (
@@ -290,57 +300,69 @@ export function LobbyScreen() {
 
         {/* §71.5: the neutral box. Without somewhere to step out to, two full
             teams cannot swap anyone without a player leaving the room. */}
-        <button
-          onClick={() => void pick(null)}
-          disabled={isSpectator || !me?.teamId}
-          aria-pressed={!isSpectator && !me?.teamId}
-          className="mt-3 w-full rounded-2xl border-2 border-dashed p-3 text-left disabled:cursor-default"
+        <div
+          className="mt-3 w-full rounded-2xl border-2 border-dashed p-3 text-left transition-colors"
           style={{
             borderColor: !isSpectator && !me?.teamId ? "var(--accent)" : "var(--border)",
             background: !isSpectator && !me?.teamId ? "rgba(251,191,36,.06)" : "transparent",
             opacity: isSpectator ? 0.6 : 1,
+            transitionDuration: "var(--dur-fast)",
           }}
         >
-          <div className="flex items-center justify-between">
+          <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-semibold">No team</span>
             <span className="text-[11px] text-[var(--text-muted)]">{unassigned.length}</span>
           </div>
 
-          <div className="mt-1.5 flex min-h-[24px] flex-wrap items-center gap-x-3 gap-y-1">
+          <div className="mb-3 flex flex-wrap gap-x-4 gap-y-2 min-h-[24px]">
             {unassigned.map((p) => (
-              <span
-                key={p.id}
-                className={`text-xs ${p.id === me?.id ? "font-bold text-[var(--accent)]" : "text-[var(--text-muted)]"}`}
-              >
-                {p.name}
-                {p.id === me?.id ? " (you)" : ""}
-              </span>
+              <div key={p.id} className="min-w-[120px]">
+                <MemberRow
+                  player={p}
+                  hostId={room.hostId}
+                  meId={me?.id}
+                  {...(isHost && p.isBot ? { onRemove: () => void removeBot(p.id) } : {})}
+                  {...(isHost && p.id !== me?.id ? { onKick: () => void kickPlayer(p.id) } : {})}
+                />
+              </div>
             ))}
             {unassigned.length === 0 && (
               <span className="text-xs text-[var(--text-muted)]">Nobody waiting</span>
             )}
           </div>
 
-          <div className="mt-2 text-[11px] font-semibold">
+          <button
+            onClick={() => void pick(null)}
+            disabled={isSpectator || !me?.teamId}
+            className="w-full rounded-lg border px-2 py-1.5 text-[11px] font-semibold disabled:cursor-default"
+            style={{
+              borderColor: !isSpectator && !me?.teamId ? "var(--accent)" : "var(--border)",
+              color: isSpectator
+                ? "var(--text-muted)"
+                : !me?.teamId
+                  ? "var(--accent)"
+                  : "var(--text)",
+              background: !isSpectator && !me?.teamId ? "transparent" : "rgba(255,255,255,.04)",
+              opacity: isSpectator || !me?.teamId ? 0.6 : 1,
+            }}
+          >
             {isSpectator ? (
-              <span className="text-[var(--text-muted)]">
-                Spectators do not hold seats or join teams
-              </span>
+              "Spectators do not hold seats or join teams"
             ) : !me?.teamId ? (
-              <span className="text-[var(--text-muted)]">
-                You'll be placed automatically at start
+              <span className="flex items-center justify-center gap-1">
+                <Check size={12} /> You'll be placed automatically at start
               </span>
             ) : bothFull ? (
-              <span className="flex items-center gap-1 text-[var(--accent)]">
+              <span className="flex items-center justify-center gap-1 text-[var(--accent)]">
                 <LogIn size={12} /> Step out here to free your slot, then swap
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-[var(--text-muted)]">
+              <span className="flex items-center justify-center gap-1">
                 <LogIn size={12} /> Step out of your team
               </span>
             )}
-          </div>
-        </button>
+          </button>
+        </div>
 
         {error && (
           <p role="alert" className="mt-3 text-center text-sm text-[var(--team-them)]">
@@ -477,15 +499,18 @@ function MemberRow({
   hostId,
   meId,
   onRemove,
+  onKick,
 }: {
   player: PublicPlayer;
   hostId: string;
   meId: string | undefined;
   onRemove?: () => void;
+  /** Host-only: kick any non-self player from the lobby. */
+  onKick?: () => void;
 }) {
   const isMe = player.id === meId;
   return (
-    <div className="flex items-center gap-1.5 text-sm">
+    <div className="group flex items-center gap-1.5 text-sm">
       {player.id === hostId && (
         <Crown size={12} className="shrink-0 text-[var(--accent)]" aria-label="Host" />
       )}
@@ -499,18 +524,34 @@ function MemberRow({
           {player.difficulty.toLowerCase()}
         </span>
       )}
-      {onRemove && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          aria-label={`Remove ${player.name}`}
-          className="ml-auto shrink-0 rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--team-them)]"
-        >
-          <X size={12} />
-        </button>
-      )}
+      <span className="ml-auto flex items-center gap-0.5">
+        {onRemove && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            aria-label={`Remove ${player.name}`}
+            className="shrink-0 rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--team-them)]"
+          >
+            <X size={12} />
+          </button>
+        )}
+        {onKick && !onRemove && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!confirm(`Kick ${player.name} from the room?`)) return;
+              onKick();
+            }}
+            aria-label={`Kick ${player.name}`}
+            title="Kick player"
+            className="shrink-0 rounded p-0.5 text-[var(--text-muted)] opacity-0 transition-opacity group-hover:opacity-100 hover:text-[var(--team-them)]"
+          >
+            <UserX size={12} />
+          </button>
+        )}
+      </span>
     </div>
   );
 }

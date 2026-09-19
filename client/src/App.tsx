@@ -75,6 +75,18 @@ export default function App() {
   const voice = useVoice();
   const [confirmLeave, setConfirmLeave] = useState(false);
 
+  // Disconnect voice whenever the player leaves the room for any reason.
+  // `room` going null is the single canonical signal that covers: Leave Room
+  // button (Lobby & Game), Game Over banner dismiss, room closed by server,
+  // and the back-button confirm modal.
+  useEffect(() => {
+    if (!room) {
+      void voice.leave();
+    }
+    // `voice.leave` is stable across renders (useCallback with no deps that change).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room]);
+
   useRouteSync(() => setConfirmLeave(true));
 
   useEffect(() => {
@@ -108,7 +120,14 @@ export default function App() {
       onChat: (m) => useGame.getState().addChat(m),
       onHostChanged: () => void 0,
       onVoiceParticipants: (ids) => useGame.getState().setVoiceParticipants(ids),
+      onKicked: () => {
+        void voice.leave();
+        clearSession();
+        useGame.getState().reset();
+        useGame.getState().setError("You were removed from the room by the host.");
+      },
       onClosed: () => {
+        void voice.leave();
         clearSession();
         useGame.getState().reset();
         useGame.getState().setError("This room has closed.");
@@ -194,6 +213,7 @@ export default function App() {
           onCancel={() => setConfirmLeave(false)}
           onLeave={() => {
             setConfirmLeave(false);
+            void voice.leave();
             void api.leaveRoom();
             clearSession();
             useGame.getState().reset();

@@ -5,7 +5,7 @@
  */
 
 import { useState } from "react";
-import { ArrowLeft, Eye, LogIn, Plus, Spade } from "lucide-react";
+import { ArrowLeft, Check, Edit2, Eye, LogIn, Plus, Spade, User } from "lucide-react";
 import {
   DEFAULT_PLAYER_COUNT,
   MAX_NAME_LENGTH,
@@ -115,6 +115,22 @@ export function LiteratureRoomScreen() {
   const setError = useGame((s) => s.setError);
   const error = useGame((s) => s.error);
 
+  const [editingName, setEditingName] = useState(!name.trim());
+  const [nameValue, setNameValue] = useState(name);
+  const [nameError, setNameError] = useState<string | null>(null);
+
+  function handleSaveName(e?: React.FormEvent) {
+    e?.preventDefault();
+    const trimmed = nameValue.trim();
+    if (!trimmed) {
+      setNameError("Please enter your name.");
+      return;
+    }
+    useGame.getState().setName(trimmed);
+    setEditingName(false);
+    setNameError(null);
+  }
+
   // A room link opened cold and not resolved by an auto-reconnect still names the room
   // the visitor meant to reach — pre-fill the join code instead of making them retype it.
   const [code, setCode] = useState(INITIAL_ROOM_CODE ?? "");
@@ -123,6 +139,11 @@ export function LiteratureRoomScreen() {
   const [playerCount, setPlayerCount] = useState<PlayerCount>(DEFAULT_PLAYER_COUNT);
 
   async function create() {
+    if (!name.trim()) {
+      setEditingName(true);
+      setNameError("Please set your player name first.");
+      return;
+    }
     setBusy(true);
     setError(null);
     const res = await api.createRoom(name, PROTOCOL_VERSION, playerCount);
@@ -137,6 +158,11 @@ export function LiteratureRoomScreen() {
   }
 
   async function join() {
+    if (!name.trim()) {
+      setEditingName(true);
+      setNameError("Please set your player name first.");
+      return;
+    }
     setBusy(true);
     setError(null);
     const res = await api.joinRoom(code.trim().toUpperCase(), name, PROTOCOL_VERSION, undefined, spectateOnly);
@@ -159,9 +185,65 @@ export function LiteratureRoomScreen() {
         <ArrowLeft size={16} /> Back to Games
       </button>
 
-      <div className="mb-6 flex items-center gap-2 text-[var(--accent)]">
-        <Spade size={22} />
-        <h1 className="text-xl font-bold">Hello, {name}</h1>
+      <div className="mb-6 flex flex-col gap-4 w-full border-b border-[var(--border)] pb-6">
+        <div className="flex items-center gap-2 text-[var(--accent)]">
+          <Spade size={22} />
+          <h1 className="text-xl font-bold">Literature</h1>
+        </div>
+
+        <div className="flex items-center">
+          {editingName ? (
+            <form onSubmit={handleSaveName} className="flex flex-col gap-2 w-full">
+              <div className="flex items-center gap-2">
+                <input
+                  autoFocus
+                  value={nameValue}
+                  maxLength={MAX_NAME_LENGTH}
+                  onChange={(e) => {
+                    setNameValue(e.target.value);
+                    if (nameError) setNameError(null);
+                  }}
+                  placeholder="Your name"
+                  className="flex-1 rounded-xl border border-[var(--accent)] bg-[var(--surface)] px-3 py-1.5 text-sm text-[var(--text)] outline-none"
+                />
+                <button
+                  type="submit"
+                  className="flex items-center gap-1 rounded-xl bg-[var(--accent)] px-3 py-1.5 text-xs font-bold text-[#2a1e02] hover:opacity-90"
+                >
+                  <Check size={14} /> Save
+                </button>
+              </div>
+              {nameError && <div className="text-xs text-[var(--team-them)]">{nameError}</div>}
+            </form>
+          ) : (
+            <div className="flex items-center justify-between w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <div className="grid h-7 w-7 place-items-center rounded-full bg-[var(--accent)]/15 text-[var(--accent)]">
+                  <User size={14} />
+                </div>
+                <div className="text-left">
+                  <div className="text-[10px] tracking-wider text-[var(--text-muted)] uppercase">
+                    Player Name
+                  </div>
+                  <div className="text-sm font-bold text-[var(--text)]">
+                    {name || <span className="text-[var(--text-muted)] italic">Not set</span>}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setNameValue(name);
+                  setEditingName(true);
+                }}
+                title="Change name"
+                aria-label="Change player name"
+                className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text)]"
+              >
+                <Edit2 size={14} />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* §72: table size decides the deck, so it is fixed at creation. */}

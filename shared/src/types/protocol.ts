@@ -183,6 +183,10 @@ export interface RemoveBotPayload {
   playerId: string;
 }
 
+export interface KickPlayerPayload {
+  playerId: string;
+}
+
 export interface SelectTeamPayload {
   /** null steps out to the unassigned pool (§71.5). */
   teamId: TeamId | null;
@@ -212,6 +216,8 @@ export interface ClientToServerEvents {
   /** §73: host-only. */
   "room:add-bot": (p: AddBotPayload, ack: (r: VoidAck) => void) => void;
   "room:remove-bot": (p: RemoveBotPayload, ack: (r: VoidAck) => void) => void;
+  /** Host-only lobby action: removes any human or bot player by id (§59). */
+  "room:kick-player": (p: KickPlayerPayload, ack: (r: VoidAck) => void) => void;
   "voice:token": (ack: (r: Ack<VoiceCredentials>) => void) => void;
   /** Advisory presence only; the engine never reads it (§69.4). */
   "voice:state": (p: { connected: boolean }, ack: (r: VoidAck) => void) => void;
@@ -230,6 +236,8 @@ export interface ServerToClientEvents {
   "room:state": (s: ClientRoomState) => void;
   "room:player-joined": (p: PublicPlayer) => void;
   "room:player-left": (playerId: string) => void;
+  /** Sent only to the kicked player's socket so they can display a reason. */
+  "room:kicked": () => void;
   "room:host-changed": (hostId: string) => void;
   "room:closed": (reason: "EMPTY" | "EXPIRED") => void;
   "game:event": (e: GameEvent, seq: number) => void;

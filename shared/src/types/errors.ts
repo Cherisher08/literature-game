@@ -13,6 +13,7 @@ export type ErrorCode =
   | "GAME_OVER"
   | "INVALID_SESSION"
   | "NOT_HOST"
+  | "CANNOT_KICK_SELF"
   // Turn
   | "NOT_YOUR_TURN"
   | "TURN_TAKEN"
@@ -49,6 +50,7 @@ export const ERROR_MESSAGE: Record<ErrorCode, string> = {
   GAME_OVER: "This game has finished.",
   INVALID_SESSION: "Your session is no longer valid.",
   NOT_HOST: "Only the host can do that.",
+  CANNOT_KICK_SELF: "You cannot kick yourself.",
 
   NOT_YOUR_TURN: "It is not your turn.",
   TURN_TAKEN: "A teammate took the turn first.",

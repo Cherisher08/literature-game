@@ -145,6 +145,10 @@ export const api = {
   removeBot: (playerId: string) =>
     request<"room:remove-bot", VoidAck>("room:remove-bot", { playerId }),
 
+  /** Host-only: kick a player (human or bot) from the lobby. */
+  kickPlayer: (playerId: string) =>
+    request<"room:kick-player", VoidAck>("room:kick-player", { playerId }),
+
   voiceToken: () => request<"voice:token", Ack<VoiceCredentials>>("voice:token"),
 
   setVoiceState: (connected: boolean) =>
@@ -164,6 +168,7 @@ export type ServerListeners = {
   onHostChanged: (hostId: string) => void;
   onClosed: (reason: "EMPTY" | "EXPIRED") => void;
   onVoiceParticipants: (playerIds: string[]) => void;
+  onKicked: () => void;
   onConnect: () => void;
   onDisconnect: () => void;
 };
@@ -176,6 +181,7 @@ export function attachListeners(l: ServerListeners): () => void {
   s.on("room:host-changed", l.onHostChanged);
   s.on("room:closed", l.onClosed);
   s.on("voice:participants", l.onVoiceParticipants);
+  s.on("room:kicked", l.onKicked);
   s.on("connect", l.onConnect);
   s.on("disconnect", l.onDisconnect);
 
@@ -186,6 +192,7 @@ export function attachListeners(l: ServerListeners): () => void {
     s.off("room:host-changed", l.onHostChanged);
     s.off("room:closed", l.onClosed);
     s.off("voice:participants", l.onVoiceParticipants);
+    s.off("room:kicked", l.onKicked);
     s.off("connect", l.onConnect);
     s.off("disconnect", l.onDisconnect);
   };

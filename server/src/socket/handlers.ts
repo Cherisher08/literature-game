@@ -37,6 +37,7 @@ import {
   joinRoomSchema,
   parse,
   removeBotSchema,
+  kickPlayerSchema,
   selectTeamSchema,
   voiceStateSchema,
 } from "./validation.js";
@@ -266,6 +267,43 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
       if ("error" in result) return ack(deny(result.error));
 
       broadcastState(result);
+      ack({ ok: true });
+    });
+
+    /** Host-only: kick any human or bot player out of the lobby. */
+    socket.on("room:kick-player", (raw, ack) => {
+      if (!actionLimiter.allow(socket.id)) return ack(deny("RATE_LIMITED"));
+      const input = parse(kickPlayerSchema, raw);
+      if (!input) return ack(deny("INVALID_TARGET"));
+
+      const room = currentRoom(socket);
+      const playerId = socket.data.playerId;
+      if (!room || !playerId) return ack(deny("ROOM_NOT_FOUND"));
+      if (room.hostId !== playerId) return ack(deny("NOT_HOST"));
+
+      const result = rooms.kickPlayer(room.id, playerId, input.playerId);
+      if ("error" in result) return ack(deny(result.error));
+
+      const { room: updated, kickedSocketId } = result;
+
+      // Tell the kicked socket first — before we remove them from the room
+      // channel — so they receive the event while still subscribed.
+      if (kickedSocketId) {
+        io.to(kickedSocketId).emit("room:kicked");
+        const kickedSocket = io.sockets.sockets.get(kickedSocketId);
+        if (kickedSocket) {
+          delete kickedSocket.data.roomId;
+          delete kickedSocket.data.playerId;
+          void kickedSocket.leave(room.id);
+        }
+      }
+
+      const previousHost = room.hostId;
+      io.to(room.id).emit("room:player-left", input.playerId);
+      if (updated.hostId !== previousHost) {
+        io.to(room.id).emit("room:host-changed", updated.hostId);
+      }
+      broadcastState(updated);
       ack({ ok: true });
     });
 

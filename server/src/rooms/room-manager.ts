@@ -253,6 +253,33 @@ export class RoomManager {
     return room;
   }
 
+  /**
+   * Host-only: removes any player (human or bot) from the lobby by id.
+   * The host cannot kick themselves.
+   * Returns the room and the kicked player's socket id (so the handler can
+   * notify them directly before the broadcast).
+   */
+  kickPlayer(
+    roomId: string,
+    hostId: string,
+    targetId: string,
+  ): { room: GameRoom; kickedSocketId: string | undefined } | { error: ErrorCode } {
+    const room = this.rooms.get(roomId);
+    if (!room) return { error: "ROOM_NOT_FOUND" };
+    if (room.status !== "LOBBY") return { error: "NOT_IN_LOBBY" };
+    if (hostId === targetId) return { error: "CANNOT_KICK_SELF" };
+
+    const player = room.players.find((p) => p.id === targetId);
+    if (!player) return { error: "INVALID_TARGET" };
+
+    const kickedSocketId = player.socketId;
+    room.players = room.players.filter((p) => p.id !== targetId);
+    room.voiceParticipants = room.voiceParticipants.filter((id) => id !== targetId);
+    this.touch(room);
+    this.reassignHostIfNeeded(room);
+    return { room, kickedSocketId };
+  }
+
   botsIn(room: GameRoom): RoomPlayer[] {
     return room.players.filter((p) => p.bot);
   }
@@ -568,6 +595,16 @@ export class RoomManager {
       if (!current || current.status !== "FINISHED") return;
       current.game = undefined;
       current.status = "LOBBY";
+      // Clean up bot stand-ins: a human seat that was taken over mid-game
+      // (`botControlled`) should return to the lobby as a disconnected human
+      // slot, not as a removable lobby bot. Real lobby bots (no `botControlled`
+      // flag) are left intact so the host can remove them if desired.
+      for (const player of current.players) {
+        if (player.botControlled) {
+          delete player.bot;
+          delete player.botControlled;
+        }
+      }
       this.touch(current);
       this.hooks.onReturnToLobby?.(current);
     });

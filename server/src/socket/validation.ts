@@ -106,6 +106,7 @@ export const addBotSchema = z.object({
 });
 
 export const removeBotSchema = z.object({ playerId: z.string().min(1).max(64) });
+export const kickPlayerSchema = z.object({ playerId: z.string().min(1).max(64) });
 
 export const voiceStateSchema = z.object({ connected: z.boolean() });
 
