@@ -406,12 +406,25 @@ export class RoomManager {
 
     const isPlayer = room.players.some((p) => p.id === playerId);
     if (isPlayer) {
-      room.players = room.players.filter((p) => p.id !== playerId);
-      if (room.game) {
-        room.game = {
-          ...room.game,
-          players: room.game.players.filter((p) => p.id !== playerId),
-        };
+      if (room.status === "PLAYING") {
+        const player = room.players.find((p) => p.id === playerId)!;
+        player.connected = false;
+        delete player.socketId;
+        delete player.disconnectedAt;
+        player.bot = { difficulty: "MEDIUM" };
+        player.botControlled = true;
+        this.setVoicePresence(room, playerId, false);
+        
+        // Notify socket layer to broadcast and have bots pick up the turn
+        this.hooks.onBotTakeover?.(room);
+      } else {
+        room.players = room.players.filter((p) => p.id !== playerId);
+        if (room.game) {
+          room.game = {
+            ...room.game,
+            players: room.game.players.filter((p) => p.id !== playerId),
+          };
+        }
       }
     } else {
       room.spectators = room.spectators.filter((p) => p.id !== playerId);
