@@ -33,6 +33,7 @@ import { DeclarationReveal, GameOverBanner } from "../components/DeclarationReve
 import { api } from "../socket/client.js";
 import { clearSession, useGame, useMe } from "../store/useGame.js";
 import { describe } from "./NameAndHome.js";
+import { HowToPlayButton } from "../components/HowToPlayButton.js";
 
 export function GameScreen() {
   const room = useGame((s) => s.room)!;
@@ -87,9 +88,16 @@ export function GameScreen() {
           style={{ background: "var(--score-bar)" }}
         >
           <Score label="You" value={myScore} tone="us" />
-          <span className="font-mono text-[10px] tracking-widest text-[var(--text-muted)]">
-            {room.roomId}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] tracking-widest text-[var(--text-muted)]">
+              {room.roomId}
+            </span>
+            <HowToPlayButton
+              gameId="literature"
+              variant="icon"
+              className="h-6 w-6 rounded-lg bg-[var(--surface-raised)] border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            />
+          </div>
           <Score label="Them" value={theirScore} tone="them" align="right" />
         </div>
 
@@ -335,6 +343,13 @@ function TablePanel({
           declaringSet={Boolean(game.declarationWindow)}
         />
       </section>
+
+      <HowToPlayButton
+        gameId="literature"
+        variant="pill"
+        label="How to Play Rules"
+        className="w-full justify-center py-2.5"
+      />
 
       <button
         onClick={() => {

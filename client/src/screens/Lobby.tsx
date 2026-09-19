@@ -26,6 +26,7 @@ import { BOT_DIFFICULTIES, type BotDifficulty, type PublicPlayer, type TeamId } 
 import { api } from "../socket/client.js";
 import { clearSession, useGame, useIsHost, useIsSpectator, useMe } from "../store/useGame.js";
 import { describe } from "./NameAndHome.js";
+import { HowToPlayButton } from "../components/HowToPlayButton.js";
 
 const TEAM_LABEL: Record<TeamId, string> = { A: "Team A", B: "Team B" };
 
@@ -127,7 +128,14 @@ export function LobbyScreen() {
   return (
     <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col gap-5 p-5">
       {/* Room code — the invite (§5.3) */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 text-center">
+      <div className="relative rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 text-center">
+        <div className="absolute top-3.5 right-3.5">
+          <HowToPlayButton
+            gameId="literature"
+            variant="icon"
+            className="h-8 w-8 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] hover:border-[var(--accent)] hover:bg-[var(--surface)] hover:text-[var(--accent)]"
+          />
+        </div>
         <p className="mb-2 text-xs tracking-wide text-[var(--text-muted)] uppercase">
           Share this code
         </p>

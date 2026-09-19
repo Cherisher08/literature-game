@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { MAX_NAME_LENGTH } from "@memory-game/shared";
 import { useGame } from "../store/useGame.js";
+import { HowToPlayButton } from "../components/HowToPlayButton.js";
 
 interface GameEntry {
   id: string;
@@ -167,8 +168,14 @@ export function GamesHub() {
           </div>
         </div>
 
-        {/* Player Profile Widget */}
-        <div className="flex items-center">
+        {/* Player Profile Widget & How to Play */}
+        <div className="flex items-center gap-2.5">
+          <HowToPlayButton
+            gameId="literature"
+            variant="pill"
+            label="How to Play"
+            className="hidden sm:flex"
+          />
           {editingName ? (
             <form onSubmit={handleSaveName} className="flex items-center gap-2">
               <input
@@ -323,23 +330,39 @@ export function GamesHub() {
                 {/* Bottom Action */}
                 <div>
                   {isActive ? (
-                    <button
-                      onClick={() => handlePlayGame(g.id)}
-                      className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] px-5 py-3.5 text-sm font-bold text-[#2a1e02] shadow-md transition-transform hover:brightness-105 active:scale-[0.98]"
-                    >
-                      Play Literature
-                      <ArrowRight
-                        size={16}
-                        className="transition-transform group-hover:translate-x-1"
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <HowToPlayButton
+                        gameId={g.id}
+                        variant="pill"
+                        label="How to Play"
+                        className="justify-center rounded-2xl border-[var(--accent)]/40 bg-[var(--surface-raised)] py-3.5 px-4 text-sm font-bold text-[var(--text)] hover:border-[var(--accent)] hover:text-[var(--accent)] sm:w-auto"
                       />
-                    </button>
+                      <button
+                        onClick={() => handlePlayGame(g.id)}
+                        className="group flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] px-5 py-3.5 text-sm font-bold text-[#2a1e02] shadow-md transition-transform hover:brightness-105 active:scale-[0.98]"
+                      >
+                        Play Literature
+                        <ArrowRight
+                          size={16}
+                          className="transition-transform group-hover:translate-x-1"
+                        />
+                      </button>
+                    </div>
                   ) : (
-                    <button
-                      disabled
-                      className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)]/40 px-5 py-3 text-xs font-semibold text-[var(--text-muted)] opacity-60"
-                    >
-                      In Development
-                    </button>
+                    <div className="flex w-full gap-2">
+                      <HowToPlayButton
+                        gameId={g.id}
+                        variant="pill"
+                        label="Rules"
+                        className="flex-1 justify-center rounded-2xl py-3 text-xs font-semibold"
+                      />
+                      <button
+                        disabled
+                        className="flex-1 cursor-not-allowed items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)]/40 px-4 py-3 text-xs font-semibold text-[var(--text-muted)] opacity-60"
+                      >
+                        In Development
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>

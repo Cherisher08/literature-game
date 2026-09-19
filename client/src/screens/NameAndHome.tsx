@@ -19,6 +19,7 @@ import {
 } from "@memory-game/shared";
 import { api } from "../socket/client.js";
 import { INITIAL_ROOM_CODE, saveSession, useGame } from "../store/useGame.js";
+import { HowToPlayButton } from "../components/HowToPlayButton.js";
 
 export function NameScreen() {
   const name = useGame((s) => s.name);
@@ -186,9 +187,12 @@ export function LiteratureRoomScreen() {
       </button>
 
       <div className="mb-6 flex flex-col gap-4 w-full border-b border-[var(--border)] pb-6">
-        <div className="flex items-center gap-2 text-[var(--accent)]">
-          <Spade size={22} />
-          <h1 className="text-xl font-bold">Literature</h1>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-[var(--accent)]">
+            <Spade size={22} />
+            <h1 className="text-xl font-bold">Literature</h1>
+          </div>
+          <HowToPlayButton gameId="literature" variant="pill" label="How to Play" />
         </div>
 
         <div className="flex items-center">
