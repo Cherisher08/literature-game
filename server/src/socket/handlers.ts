@@ -541,7 +541,7 @@ export function registerHandlers(io: GameServer, rooms: RoomManager): void {
       if (!room || !playerId) return ack(deny("ROOM_NOT_FOUND"));
       if (room.hostId !== playerId) return ack(deny("NOT_HOST"));
       if (room.status !== "LOBBY") return ack(deny("GAME_ALREADY_STARTED"));
-      if (room.players.length < 2) return ack(deny("ROOM_FULL"));
+      if (room.players.length < 2) return ack(deny("NOT_IN_LOBBY"));
 
       room.status = "PLAYING";
       room.poker = createInitialPokerState(

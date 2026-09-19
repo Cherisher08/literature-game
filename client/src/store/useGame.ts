@@ -164,15 +164,19 @@ export const useGame = create<GameStore>((set, get) => ({
       room,
       lastSeq: room.seq,
       hydrating: opts?.hydrating ?? false,
+      // Poker rooms always stay on the POKER_GAME screen — that component
+      // handles both the pre-start lobby and the live game internally.
+      // Literature rooms use the shared LOBBY screen for team selection.
       screen:
-        room.status === "LOBBY"
-          ? "LOBBY"
-          : room.gameType === "POKER"
-            ? "POKER_GAME"
+        room.gameType === "POKER"
+          ? "POKER_GAME"
+          : room.status === "LOBBY"
+            ? "LOBBY"
             : "GAME",
-      // Back in the lobby means the last game is done — clear its leftovers so
-      // they can't flash back up if this player's next game ends the same way.
-      ...(room.status === "LOBBY" ? { gameOver: null, reveal: null } : {}),
+      // Only clear Literature-specific leftovers when returning to the lobby.
+      ...(room.status === "LOBBY" && room.gameType !== "POKER"
+        ? { gameOver: null, reveal: null }
+        : {}),
     }),
 
   noteEvent: (_event, seq) => {
